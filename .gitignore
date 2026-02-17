@@ -1,0 +1,27 @@
+# Excel files (données sensibles)
+*.xlsx
+*.xls
+*.csv
+
+# Fichiers temporaires
+*.tmp
+*~
+.DS_Store
+Thumbs.db
+
+# Logs
+*.log
+
+# IDE
+.vscode/
+.idea/
+*.swp
+*.swo
+
+# Node modules (si migration future)
+node_modules/
+package-lock.json
+
+# Build
+dist/
+build/

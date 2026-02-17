@@ -1,0 +1,257 @@
+<!DOCTYPE html>
+<html lang="fr">
+<head>
+  <meta charset="UTF-8"/>
+  <meta name="viewport" content="width=device-width, initial-scale=1.0"/>
+  <title>Dashboard Projets CAD - Groupe E Celsius</title>
+  <link rel="stylesheet" href="style.css"/>
+  <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.0/dist/chart.umd.min.js"></script>
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js"></script>
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/html2canvas/1.4.1/html2canvas.min.js"></script>
+</head>
+<body>
+  <div class="hero">
+    <h1>📊 Dashboard Suivi Projets CAD</h1>
+    <p class="hero-subtitle">Groupe E Celsius - Gestion des Coûts & Prévisions</p>
+  </div>
+
+  <div class="tabs">
+    <button class="tab-btn active" data-tab="tab1">📈 Rapport Financier</button>
+    <button class="tab-btn" data-tab="tab2">💼 Imputations</button>
+    <button class="tab-btn" data-tab="tab3">📅 Planning</button>
+  </div>
+
+  <div class="container">
+    
+    <!-- ONGLET 1: RAPPORT FINANCIER -->
+    <div id="tab1" class="tab-content active">
+      <div class="card">
+        <h2>⚙️ Configuration & Import</h2>
+        <p class="hint">💡 <strong>Recommandations k :</strong> 6–8 (linéaires/études) • 10–14 (CAPEX réseau/GC) • 14–18 (projets courts/rapides)</p>
+        
+        <div class="grid-4">
+          <div class="form-col">
+            <label for="prevFile">📁 Prévisions (Excel)</label>
+            <input type="file" id="prevFile" accept=".xlsx,.xls"/>
+          </div>
+          <div class="form-col">
+            <label for="realFile">📁 Coûts Réels (Excel)</label>
+            <input type="file" id="realFile" accept=".xlsx,.xls"/>
+          </div>
+          <div class="form-col">
+            <label for="coefK">Coefficient k (Courbe S)</label>
+            <div class="k-wrap">
+              <input type="range" id="coefK" min="4" max="20" step="0.5" value="12"/>
+              <input type="number" id="coefK_num" min="4" max="20" step="0.5" value="12"/>
+            </div>
+          </div>
+          <div class="form-col">
+            <label>📆 Mode d'affichage</label>
+            <div class="toggle">
+              <label><input type="radio" name="viewMode" id="viewGlobal" value="global" checked/> Vue Globale</label>
+              <label><input type="radio" name="viewMode" id="viewSOnly" value="s-only"/> Vue S uniquement</label>
+            </div>
+          </div>
+        </div>
+
+        <div class="actions-grid">
+          <button id="btnExportPNG" class="btn-primary">📸 Graphique (PNG)</button>
+          <button id="btnExportTablesPNG" class="btn-primary">🖼️ Tableaux (PNG)</button>
+          <button id="btnExportXLSX" class="btn-primary">📥 Tableaux (Excel)</button>
+          <button id="btnRefresh" class="btn-secondary">🔄 Recalculer</button>
+        </div>
+        <div class="status" id="status">⏳ En attente des fichiers...</div>
+      </div>
+
+      <div id="kpiSection" class="kpi-section" style="display:none;">
+        <div class="kpi-card">
+          <div class="kpi-label">Budget Révisé Total</div>
+          <div class="kpi-value" id="kpiBudgetRev">—</div>
+          <div class="kpi-unit">CHF</div>
+        </div>
+        <div class="kpi-card">
+          <div class="kpi-label">Coûts Réels Total</div>
+          <div class="kpi-value" id="kpiReelTotal">—</div>
+          <div class="kpi-unit">CHF</div>
+        </div>
+        <div class="kpi-card">
+          <div class="kpi-label">Écart</div>
+          <div class="kpi-value" id="kpiEcart">—</div>
+          <div class="kpi-unit">CHF</div>
+        </div>
+        <div class="kpi-card">
+          <div class="kpi-label">% Avancement</div>
+          <div class="kpi-value" id="kpiAvancement">—</div>
+          <div class="kpi-unit">%</div>
+        </div>
+      </div>
+
+      <div class="card">
+        <h2>📈 Courbes S & Coûts Cumulés</h2>
+        <p class="hint">💡 Cliquez sur la légende pour masquer/afficher des séries</p>
+        <div class="chart-wrapper">
+          <canvas id="chart"></canvas>
+        </div>
+      </div>
+
+      <div class="charts-grid">
+        <div class="card">
+          <h2>🥧 Répartition Budget Révisé</h2>
+          <div class="chart-wrapper-small">
+            <canvas id="chartPieBudgetRev"></canvas>
+          </div>
+        </div>
+        <div class="card">
+          <h2>🎯 Répartition Atterrissage (AT)</h2>
+          <div class="chart-wrapper-small">
+            <canvas id="chartPieAT"></canvas>
+          </div>
+        </div>
+      </div>
+
+      <div class="card">
+        <h2>📊 Avancement par ID Projet</h2>
+        <p class="hint">💡 Comparaison Réel / Budget Révisé</p>
+        <div class="chart-wrapper">
+          <canvas id="chartBar"></canvas>
+        </div>
+      </div>
+
+      <div class="card" id="tablePrevCard">
+        <h2>📋 Budget Révisé - Détails Mensuels</h2>
+        <div class="table-wrapper">
+          <table class="table" id="tablePreview">
+            <thead>
+              <tr>
+                <th>Mois</th>
+                <th>Montant (S)</th>
+                <th>Cumul (S)</th>
+                <th>Réel par mois</th>
+                <th>Réel cumulé</th>
+                <th>Écart</th>
+              </tr>
+            </thead>
+            <tbody></tbody>
+          </table>
+        </div>
+      </div>
+
+      <div class="card" id="tableCmpCard">
+        <h2>🔍 Comparatif par ID Projet</h2>
+        <div class="table-wrapper">
+          <table class="table" id="tableCompare">
+            <thead>
+              <tr>
+                <th>ID Projet</th>
+                <th>Budget</th>
+                <th>Budget Révisé</th>
+                <th>AT</th>
+                <th>Réel</th>
+                <th>Écart Rev</th>
+                <th>Écart AT</th>
+                <th>% Rev</th>
+              </tr>
+            </thead>
+            <tbody></tbody>
+            <tfoot></tfoot>
+          </table>
+        </div>
+      </div>
+    </div>
+
+    <!-- ONGLET 2: IMPUTATIONS -->
+    <div id="tab2" class="tab-content">
+      <div id="kpiSectionHonoraires" class="kpi-section" style="display:none;">
+        <div class="kpi-card">
+          <div class="kpi-label">Honoraires Budget Révisé</div>
+          <div class="kpi-value" id="kpiHonoBudgetRev">—</div>
+          <div class="kpi-unit">CHF</div>
+        </div>
+        <div class="kpi-card">
+          <div class="kpi-label">Honoraires AT</div>
+          <div class="kpi-value" id="kpiHonoAT">—</div>
+          <div class="kpi-unit">CHF</div>
+        </div>
+        <div class="kpi-card">
+          <div class="kpi-label">Honoraires Réels</div>
+          <div class="kpi-value" id="kpiHonoReel">—</div>
+          <div class="kpi-unit">CHF</div>
+        </div>
+        <div class="kpi-card">
+          <div class="kpi-label">Reste à imputer</div>
+          <div class="kpi-value" id="kpiHonoReste">—</div>
+          <div class="kpi-unit">CHF</div>
+        </div>
+      </div>
+
+      <div class="card">
+        <h2>📊 Honoraires par Métier</h2>
+        <div class="chart-wrapper">
+          <canvas id="chartHonoMetier"></canvas>
+        </div>
+      </div>
+
+      <div class="card">
+        <h2>👥 Détails par Ressource (Réel uniquement)</h2>
+        <div class="table-wrapper">
+          <table class="table" id="tableRessources">
+            <thead>
+              <tr>
+                <th>Ressource</th>
+                <th>Métier</th>
+                <th>Projet</th>
+                <th>Montant Réel</th>
+              </tr>
+            </thead>
+            <tbody></tbody>
+          </table>
+        </div>
+      </div>
+
+      <div class="card">
+        <h2>🔍 Synthèse par Métier (Réel)</h2>
+        <div class="chart-wrapper">
+          <canvas id="chartSyntheseMetier"></canvas>
+        </div>
+      </div>
+    </div>
+
+    <!-- ONGLET 3: PLANNING -->
+    <div id="tab3" class="tab-content">
+      <div class="card">
+        <h2>📅 Planning Projet - Gantt</h2>
+        <p class="hint">💡 Les dates réelles sont calculées automatiquement depuis les imputations</p>
+        <div class="chart-wrapper-large">
+          <canvas id="chartGantt"></canvas>
+        </div>
+        <button id="btnExportGanttPNG" class="btn-primary">📸 Export Gantt (PNG)</button>
+      </div>
+
+      <div class="card">
+        <h2>📋 Tableau Consolidé Planning</h2>
+        <div class="table-wrapper">
+          <table class="table" id="tablePlanning">
+            <thead>
+              <tr>
+                <th>Projet</th>
+                <th>Début BR</th>
+                <th>Fin BR</th>
+                <th>Début AT</th>
+                <th>Fin AT</th>
+                <th>Début Réel</th>
+                <th>Fin Réel</th>
+                <th>Écart (jours)</th>
+                <th>Statut</th>
+              </tr>
+            </thead>
+            <tbody></tbody>
+          </table>
+        </div>
+      </div>
+    </div>
+
+  </div>
+
+  <script src="script.js"></script>
+</body>
+</html>
