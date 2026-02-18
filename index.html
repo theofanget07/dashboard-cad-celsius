@@ -29,6 +29,35 @@
   </div>
 </div>
 
+<!-- ═══════════════════ CONTRÔLES GLOBAUX STICKY ═══════════════════ -->
+<div class="global-controls">
+  <div class="controls-inner">
+    <div class="control-group">
+      <label>📁 <strong>Prévisions</strong></label>
+      <input type="file" id="prevFile" accept=".xlsx,.xls">
+    </div>
+    <div class="control-group">
+      <label>📁 <strong>Réalisations</strong></label>
+      <input type="file" id="realFile" accept=".xlsx,.xls">
+    </div>
+    <div class="control-group">
+      <label>⚙️ <strong>Coef. k</strong> <span class="hint-inline">(courbure S)</span></label>
+      <div class="k-wrap">
+        <input type="range" id="coefK" min="4" max="20" value="12">
+        <input type="number" id="coefK_num" min="4" max="20" value="12">
+      </div>
+    </div>
+    <div class="control-group">
+      <label>📅 <strong>Vue temporelle</strong></label>
+      <div class="toggle">
+        <label><input type="radio" name="view" id="viewGlobal" checked> Vue globale</label>
+        <label><input type="radio" name="view" id="viewSOnly"> S uniquement</label>
+      </div>
+    </div>
+  </div>
+  <div id="status" class="status">⏳ En attente des fichiers Excel...</div>
+</div>
+
 <!-- ═══════════════════ TABS ═══════════════════ -->
 <div class="tabs">
   <button class="tab-btn active" data-tab="recap">📊 Récapitulatif</button>
@@ -42,58 +71,56 @@
 <div class="tab-content active" id="recap">
   <div class="container">
     
-    <!-- Upload -->
-    <div class="card">
-      <div class="card-header">
-        <h2>📁 Fichiers Excel</h2>
-      </div>
-      <div class="grid-4" style="grid-template-columns: 1fr 1fr 1fr 1fr;">
-        <div class="form-col">
-          <label>Prévisions (.xlsx)</label>
-          <input type="file" id="prevFile" accept=".xlsx,.xls">
-        </div>
-        <div class="form-col">
-          <label>Réalisations (.xlsx)</label>
-          <input type="file" id="realFile" accept=".xlsx,.xls">
-        </div>
-        <div class="form-col">
-          <label>Coef. k (courbure S)</label>
-          <div class="k-wrap">
-            <input type="range" id="coefK" min="4" max="20" value="12">
-            <input type="number" id="coefK_num" min="4" max="20" value="12">
-          </div>
-        </div>
-        <div class="form-col">
-          <label>Vue temporelle</label>
-          <div class="toggle">
-            <label><input type="radio" name="view" id="viewGlobal" checked> 📅 Vue globale</label>
-            <label><input type="radio" name="view" id="viewSOnly"> 📐 S uniquement</label>
-          </div>
-        </div>
-      </div>
-      <div id="status" class="status">⏳ En attente des fichiers...</div>
-    </div>
-
-    <!-- RECAP : 3 SECTIONS -->
     <div class="section-title"><h2>💰 RÉCAPITULATIF BUDGETS — Toutes Phases</h2></div>
     <div id="recapBudgetKPI" class="kpi-section"></div>
-    <div class="card"><canvas id="recapBudgetChart"></canvas></div>
     <div class="card">
-      <h2>📋 Tableau comparatif par phase</h2>
+      <div class="card-header">
+        <h2>📈 Avancement par Phase</h2>
+        <div class="card-actions">
+          <button class="btn-export-sm" onclick="exportChartPNG('recapBudgetChart')">📷 PNG</button>
+        </div>
+      </div>
+      <div class="chart-wrapper-small"><canvas id="recapBudgetChart"></canvas></div>
+    </div>
+    <div class="card">
+      <div class="card-header">
+        <h2>📋 Tableau comparatif par phase</h2>
+        <div class="card-actions">
+          <button class="btn-export-sm btn-excel" onclick="exportTableExcel('recapBudgetTable', 'Recap_Budget')">📊 Excel</button>
+        </div>
+      </div>
       <div class="table-wrapper"><table id="recapBudgetTable" class="table"></table></div>
     </div>
 
-    <div class="section-title"><h2>💼 RÉCAPITULATIF IMPUTATIONS — Honoraires Toutes Phases</h2></div>
+    <div class="section-title"><h2>💼 RÉCAPITULATIF IMPUTATIONS</h2></div>
     <div id="recapImputKPI" class="kpi-section"></div>
-    <div class="card"><canvas id="recapImputChart"></canvas></div>
     <div class="card">
-      <h2>📋 Tableau honoraires par phase</h2>
+      <div class="card-header">
+        <h2>📊 Honoraires par Phase</h2>
+        <div class="card-actions">
+          <button class="btn-export-sm" onclick="exportChartPNG('recapImputChart')">📷 PNG</button>
+        </div>
+      </div>
+      <div class="chart-wrapper-small"><canvas id="recapImputChart"></canvas></div>
+    </div>
+    <div class="card">
+      <div class="card-header">
+        <h2>📋 Tableau Honoraires</h2>
+        <div class="card-actions">
+          <button class="btn-export-sm btn-excel" onclick="exportTableExcel('recapImputTable', 'Recap_Imput')">📊 Excel</button>
+        </div>
+      </div>
       <div class="table-wrapper"><table id="recapImputTable" class="table"></table></div>
     </div>
 
-    <div class="section-title"><h2>📅 RÉCAPITULATIF PLANNING — Toutes Phases</h2></div>
+    <div class="section-title"><h2>📅 RÉCAPITULATIF PLANNING</h2></div>
     <div class="card">
-      <h2>📊 Gantt Global</h2>
+      <div class="card-header">
+        <h2>📊 Gantt Global</h2>
+        <div class="card-actions">
+          <button class="btn-export-sm" onclick="exportChartPNG('recapPlanningChart')">📷 PNG</button>
+        </div>
+      </div>
       <div class="chart-wrapper-gantt"><canvas id="recapPlanningChart"></canvas></div>
     </div>
 
@@ -107,21 +134,54 @@
     <div class="section-title"><h2>💰 BUDGETS — Phase SIA 2</h2></div>
     <div id="kpiSectionSIA2" class="kpi-section"></div>
     <div class="card">
-      <h2>📈 Courbes S — SIA 2</h2>
-      <div class="hint">💡 Budget Révisé (orange) • AT (bleu) • Réel cumulé (rouge)</div>
+      <div class="card-header">
+        <h2>📈 Courbes S — SIA 2</h2>
+        <div class="card-actions">
+          <button class="btn-export-sm" onclick="exportChartPNG('chartSIA2')">📷 PNG</button>
+        </div>
+      </div>
+      <div class="hint">💡 Budget Révisé (orange) • AT (bleu) • Réel cumulé (rouge) • Ligne rouge = Aujourd'hui</div>
       <div class="chart-wrapper"><canvas id="chartSIA2"></canvas></div>
     </div>
+    
     <div class="card">
-      <h2>📋 Budgets par Tâche</h2>
+      <div class="card-header">
+        <h2>📊 Tableau Mensuel — Budget Révisé vs Réel</h2>
+        <div class="card-actions">
+          <button class="btn-export-sm btn-excel" onclick="exportTableExcel('tableSIA2Monthly', 'SIA2_Mensuel')">📊 Excel</button>
+        </div>
+      </div>
+      <div class="hint">💡 Projection S mensuelle • Cumul projeté • Réel mensuel • Cumul réel • Écarts</div>
+      <div class="table-wrapper"><table id="tableSIA2Monthly" class="table"></table></div>
+    </div>
+
+    <div class="card">
+      <div class="card-header">
+        <h2>📋 Budgets par Tâche</h2>
+        <div class="card-actions">
+          <button class="btn-export-sm btn-excel" onclick="exportTableExcel('tableSIA2Budget', 'SIA2_Budget')">📊 Excel</button>
+        </div>
+      </div>
       <div class="table-wrapper"><table id="tableSIA2Budget" class="table"></table></div>
     </div>
+
     <div class="charts-grid">
       <div class="card">
-        <h2>🍰 Répartition Budget Révisé</h2>
+        <div class="card-header">
+          <h2>🍰 Répartition Budget Révisé</h2>
+          <div class="card-actions">
+            <button class="btn-export-sm" onclick="exportChartPNG('pieSIA2BR')">📷 PNG</button>
+          </div>
+        </div>
         <div class="chart-wrapper-small"><canvas id="pieSIA2BR"></canvas></div>
       </div>
       <div class="card">
-        <h2>📊 Avancement par Tâche</h2>
+        <div class="card-header">
+          <h2>📊 Avancement par Tâche</h2>
+          <div class="card-actions">
+            <button class="btn-export-sm" onclick="exportChartPNG('barSIA2')">📷 PNG</button>
+          </div>
+        </div>
         <div class="chart-wrapper-small"><canvas id="barSIA2"></canvas></div>
       </div>
     </div>
@@ -129,13 +189,23 @@
     <div class="section-title"><h2>💼 IMPUTATIONS — Phase SIA 2</h2></div>
     <div id="kpiSectionImpSIA2" class="kpi-section"></div>
     <div class="card">
-      <h2>📋 Honoraires par Tâche (Interne / Externe)</h2>
+      <div class="card-header">
+        <h2>📋 Honoraires par Tâche</h2>
+        <div class="card-actions">
+          <button class="btn-export-sm btn-excel" onclick="exportTableExcel('tableImputSIA2', 'SIA2_Honoraires')">📊 Excel</button>
+        </div>
+      </div>
       <div class="table-wrapper"><table id="tableImputSIA2" class="table"></table></div>
     </div>
 
     <div class="section-title"><h2>📅 PLANNING — Phase SIA 2</h2></div>
     <div class="card">
-      <h2>📊 Gantt SIA 2</h2>
+      <div class="card-header">
+        <h2>📊 Gantt SIA 2</h2>
+        <div class="card-actions">
+          <button class="btn-export-sm" onclick="exportChartPNG('ganttSIA2')">📷 PNG</button>
+        </div>
+      </div>
       <div class="chart-wrapper-gantt"><canvas id="ganttSIA2"></canvas></div>
     </div>
 
@@ -149,21 +219,54 @@
     <div class="section-title"><h2>💰 BUDGETS — Phase SIA 3</h2></div>
     <div id="kpiSectionSIA3" class="kpi-section"></div>
     <div class="card">
-      <h2>📈 Courbes S — SIA 3</h2>
-      <div class="hint">💡 Budget Révisé (orange) • AT (bleu) • Réel cumulé (rouge)</div>
+      <div class="card-header">
+        <h2>📈 Courbes S — SIA 3</h2>
+        <div class="card-actions">
+          <button class="btn-export-sm" onclick="exportChartPNG('chartSIA3')">📷 PNG</button>
+        </div>
+      </div>
+      <div class="hint">💡 Budget Révisé (orange) • AT (bleu) • Réel cumulé (rouge) • Ligne rouge = Aujourd'hui</div>
       <div class="chart-wrapper"><canvas id="chartSIA3"></canvas></div>
     </div>
+
     <div class="card">
-      <h2>📋 Budgets par Tâche</h2>
+      <div class="card-header">
+        <h2>📊 Tableau Mensuel — Budget Révisé vs Réel</h2>
+        <div class="card-actions">
+          <button class="btn-export-sm btn-excel" onclick="exportTableExcel('tableSIA3Monthly', 'SIA3_Mensuel')">📊 Excel</button>
+        </div>
+      </div>
+      <div class="hint">💡 Projection S mensuelle • Cumul projeté • Réel mensuel • Cumul réel • Écarts</div>
+      <div class="table-wrapper"><table id="tableSIA3Monthly" class="table"></table></div>
+    </div>
+
+    <div class="card">
+      <div class="card-header">
+        <h2>📋 Budgets par Tâche</h2>
+        <div class="card-actions">
+          <button class="btn-export-sm btn-excel" onclick="exportTableExcel('tableSIA3Budget', 'SIA3_Budget')">📊 Excel</button>
+        </div>
+      </div>
       <div class="table-wrapper"><table id="tableSIA3Budget" class="table"></table></div>
     </div>
+
     <div class="charts-grid">
       <div class="card">
-        <h2>🍰 Répartition Budget Révisé</h2>
+        <div class="card-header">
+          <h2>🍰 Répartition Budget Révisé</h2>
+          <div class="card-actions">
+            <button class="btn-export-sm" onclick="exportChartPNG('pieSIA3BR')">📷 PNG</button>
+          </div>
+        </div>
         <div class="chart-wrapper-small"><canvas id="pieSIA3BR"></canvas></div>
       </div>
       <div class="card">
-        <h2>📊 Avancement par Tâche</h2>
+        <div class="card-header">
+          <h2>📊 Avancement par Tâche</h2>
+          <div class="card-actions">
+            <button class="btn-export-sm" onclick="exportChartPNG('barSIA3')">📷 PNG</button>
+          </div>
+        </div>
         <div class="chart-wrapper-small"><canvas id="barSIA3"></canvas></div>
       </div>
     </div>
@@ -171,13 +274,23 @@
     <div class="section-title"><h2>💼 IMPUTATIONS — Phase SIA 3</h2></div>
     <div id="kpiSectionImpSIA3" class="kpi-section"></div>
     <div class="card">
-      <h2>📋 Honoraires par Tâche (Interne / Externe)</h2>
+      <div class="card-header">
+        <h2>📋 Honoraires par Tâche</h2>
+        <div class="card-actions">
+          <button class="btn-export-sm btn-excel" onclick="exportTableExcel('tableImputSIA3', 'SIA3_Honoraires')">📊 Excel</button>
+        </div>
+      </div>
       <div class="table-wrapper"><table id="tableImputSIA3" class="table"></table></div>
     </div>
 
     <div class="section-title"><h2>📅 PLANNING — Phase SIA 3</h2></div>
     <div class="card">
-      <h2>📊 Gantt SIA 3</h2>
+      <div class="card-header">
+        <h2>📊 Gantt SIA 3</h2>
+        <div class="card-actions">
+          <button class="btn-export-sm" onclick="exportChartPNG('ganttSIA3')">📷 PNG</button>
+        </div>
+      </div>
       <div class="chart-wrapper-gantt"><canvas id="ganttSIA3"></canvas></div>
     </div>
 
@@ -191,21 +304,54 @@
     <div class="section-title"><h2>💰 BUDGETS — Phase SIA 4</h2></div>
     <div id="kpiSectionSIA4" class="kpi-section"></div>
     <div class="card">
-      <h2>📈 Courbes S — SIA 4</h2>
-      <div class="hint">💡 Budget Révisé (orange) • AT (bleu) • Réel cumulé (rouge)</div>
+      <div class="card-header">
+        <h2>📈 Courbes S — SIA 4</h2>
+        <div class="card-actions">
+          <button class="btn-export-sm" onclick="exportChartPNG('chartSIA4')">📷 PNG</button>
+        </div>
+      </div>
+      <div class="hint">💡 Budget Révisé (orange) • AT (bleu) • Réel cumulé (rouge) • Ligne rouge = Aujourd'hui</div>
       <div class="chart-wrapper"><canvas id="chartSIA4"></canvas></div>
     </div>
+
     <div class="card">
-      <h2>📋 Budgets par Tâche</h2>
+      <div class="card-header">
+        <h2>📊 Tableau Mensuel — Budget Révisé vs Réel</h2>
+        <div class="card-actions">
+          <button class="btn-export-sm btn-excel" onclick="exportTableExcel('tableSIA4Monthly', 'SIA4_Mensuel')">📊 Excel</button>
+        </div>
+      </div>
+      <div class="hint">💡 Projection S mensuelle • Cumul projeté • Réel mensuel • Cumul réel • Écarts</div>
+      <div class="table-wrapper"><table id="tableSIA4Monthly" class="table"></table></div>
+    </div>
+
+    <div class="card">
+      <div class="card-header">
+        <h2>📋 Budgets par Tâche</h2>
+        <div class="card-actions">
+          <button class="btn-export-sm btn-excel" onclick="exportTableExcel('tableSIA4Budget', 'SIA4_Budget')">📊 Excel</button>
+        </div>
+      </div>
       <div class="table-wrapper"><table id="tableSIA4Budget" class="table"></table></div>
     </div>
+
     <div class="charts-grid">
       <div class="card">
-        <h2>🍰 Répartition Budget Révisé</h2>
+        <div class="card-header">
+          <h2>🍰 Répartition Budget Révisé</h2>
+          <div class="card-actions">
+            <button class="btn-export-sm" onclick="exportChartPNG('pieSIA4BR')">📷 PNG</button>
+          </div>
+        </div>
         <div class="chart-wrapper-small"><canvas id="pieSIA4BR"></canvas></div>
       </div>
       <div class="card">
-        <h2>📊 Avancement par Tâche</h2>
+        <div class="card-header">
+          <h2>📊 Avancement par Tâche</h2>
+          <div class="card-actions">
+            <button class="btn-export-sm" onclick="exportChartPNG('barSIA4')">📷 PNG</button>
+          </div>
+        </div>
         <div class="chart-wrapper-small"><canvas id="barSIA4"></canvas></div>
       </div>
     </div>
@@ -213,13 +359,23 @@
     <div class="section-title"><h2>💼 IMPUTATIONS — Phase SIA 4</h2></div>
     <div id="kpiSectionImpSIA4" class="kpi-section"></div>
     <div class="card">
-      <h2>📋 Honoraires par Tâche (Interne / Externe)</h2>
+      <div class="card-header">
+        <h2>📋 Honoraires par Tâche</h2>
+        <div class="card-actions">
+          <button class="btn-export-sm btn-excel" onclick="exportTableExcel('tableImputSIA4', 'SIA4_Honoraires')">📊 Excel</button>
+        </div>
+      </div>
       <div class="table-wrapper"><table id="tableImputSIA4" class="table"></table></div>
     </div>
 
     <div class="section-title"><h2>📅 PLANNING — Phase SIA 4</h2></div>
     <div class="card">
-      <h2>📊 Gantt SIA 4</h2>
+      <div class="card-header">
+        <h2>📊 Gantt SIA 4</h2>
+        <div class="card-actions">
+          <button class="btn-export-sm" onclick="exportChartPNG('ganttSIA4')">📷 PNG</button>
+        </div>
+      </div>
       <div class="chart-wrapper-gantt"><canvas id="ganttSIA4"></canvas></div>
     </div>
 
@@ -230,63 +386,97 @@
 <div class="tab-content" id="sia5">
   <div class="container">
     
-    <!-- SOUS-ONGLETS SIA 5 -->
     <div class="subtabs">
       <button class="subtab-btn active" data-subtab="sia5-budget">📈 Rapport Financier</button>
       <button class="subtab-btn" data-subtab="sia5-imput">💼 Imputations</button>
       <button class="subtab-btn" data-subtab="sia5-plan">📅 Planning</button>
     </div>
 
-    <!-- ═══ SOUS-ONGLET: BUDGET ═══ -->
+    <!-- SOUS-ONGLET BUDGET -->
     <div class="subtab-content active" id="sia5-budget">
       <div class="section-title"><h2>💰 BUDGETS — Phase SIA 5</h2></div>
       <div id="kpiSectionSIA5" class="kpi-section"></div>
       <div class="card">
-        <h2>📈 Courbes S — SIA 5</h2>
-        <div class="hint">💡 Budget Révisé (orange) • AT (bleu) • Réel cumulé (rouge)</div>
+        <div class="card-header">
+          <h2>📈 Courbes S — SIA 5</h2>
+          <div class="card-actions">
+            <button class="btn-export-sm" onclick="exportChartPNG('chartSIA5')">📷 PNG</button>
+          </div>
+        </div>
+        <div class="hint">💡 Budget Révisé (orange) • AT (bleu) • Réel cumulé (rouge) • Ligne rouge = Aujourd'hui</div>
         <div class="chart-wrapper"><canvas id="chartSIA5"></canvas></div>
       </div>
-      
-      <!-- NOUVEAU : Tableau mois par mois -->
+
       <div class="card">
-        <h2>📊 Tableau Mensuel — Budget Révisé vs Réel</h2>
-        <div class="hint">💡 Projection S • Cumul projeté • Réel mensuel • Cumul réel • Écarts</div>
+        <div class="card-header">
+          <h2>📊 Tableau Mensuel — Budget Révisé vs Réel</h2>
+          <div class="card-actions">
+            <button class="btn-export-sm btn-excel" onclick="exportTableExcel('tableSIA5Monthly', 'SIA5_Mensuel')">📊 Excel</button>
+          </div>
+        </div>
+        <div class="hint">💡 Projection S mensuelle • Cumul projeté • Réel mensuel • Cumul réel • Écarts</div>
         <div class="table-wrapper"><table id="tableSIA5Monthly" class="table"></table></div>
       </div>
 
       <div class="card">
-        <h2>📋 Budgets par Sous-Projet</h2>
+        <div class="card-header">
+          <h2>📋 Budgets par Sous-Projet</h2>
+          <div class="card-actions">
+            <button class="btn-export-sm btn-excel" onclick="exportTableExcel('tableSIA5Budget', 'SIA5_Budget')">📊 Excel</button>
+          </div>
+        </div>
         <div class="table-wrapper"><table id="tableSIA5Budget" class="table"></table></div>
       </div>
+
       <div class="charts-grid">
         <div class="card">
-          <h2>🍰 Répartition Budget Révisé</h2>
+          <div class="card-header">
+            <h2>🍰 Répartition Budget Révisé</h2>
+            <div class="card-actions">
+              <button class="btn-export-sm" onclick="exportChartPNG('pieSIA5BR')">📷 PNG</button>
+            </div>
+          </div>
           <div class="chart-wrapper-small"><canvas id="pieSIA5BR"></canvas></div>
         </div>
         <div class="card">
-          <h2>📊 Avancement par Sous-Projet</h2>
+          <div class="card-header">
+            <h2>📊 Avancement par Sous-Projet</h2>
+            <div class="card-actions">
+              <button class="btn-export-sm" onclick="exportChartPNG('barSIA5')">📷 PNG</button>
+            </div>
+          </div>
           <div class="chart-wrapper-small"><canvas id="barSIA5"></canvas></div>
         </div>
       </div>
     </div>
 
-    <!-- ═══ SOUS-ONGLET: IMPUTATIONS ═══ -->
+    <!-- SOUS-ONGLET IMPUTATIONS -->
     <div class="subtab-content" id="sia5-imput">
       <div class="section-title"><h2>💼 IMPUTATIONS — Phase SIA 5</h2></div>
       <div id="kpiSectionImpSIA5" class="kpi-section"></div>
       <div class="card">
-        <h2>📋 Honoraires par Sous-Projet (Interne / Externe)</h2>
+        <div class="card-header">
+          <h2>📋 Honoraires par Sous-Projet</h2>
+          <div class="card-actions">
+            <button class="btn-export-sm btn-excel" onclick="exportTableExcel('tableImputSIA5', 'SIA5_Honoraires')">📊 Excel</button>
+          </div>
+        </div>
         <div class="hint">💡 Distinction Interne/Externe • Uniquement honoraires • Comparaison BR / AT / Réel</div>
         <div class="table-wrapper"><table id="tableImputSIA5" class="table"></table></div>
       </div>
     </div>
 
-    <!-- ═══ SOUS-ONGLET: PLANNING ═══ -->
+    <!-- SOUS-ONGLET PLANNING -->
     <div class="subtab-content" id="sia5-plan">
       <div class="section-title"><h2>📅 PLANNING — Phase SIA 5</h2></div>
       <div class="card">
-        <h2>📊 Gantt SIA 5 — 6 Sous-Projets</h2>
-        <div class="hint">💡 Dates éditables dans le tableau ci-dessous • Cliquer "Recalculer Gantt" après modification</div>
+        <div class="card-header">
+          <h2>📊 Gantt SIA 5</h2>
+          <div class="card-actions">
+            <button class="btn-export-sm" onclick="exportChartPNG('ganttSIA5')">📷 PNG</button>
+          </div>
+        </div>
+        <div class="hint">💡 Dates éditables dans le tableau ci-dessous • Recalcul automatique</div>
         <div class="gantt-legend">
           <span><span class="gantt-dot" style="background:#e8873a;"></span>Budget Révisé</span>
           <span><span class="gantt-dot" style="background:#163a5f;"></span>AT</span>
@@ -295,10 +485,14 @@
         <div class="chart-wrapper-gantt"><canvas id="ganttSIA5"></canvas></div>
       </div>
       <div class="card">
-        <h2>📋 Tableau Planning — Dates Éditables</h2>
-        <div class="hint">💡 Modifier les dates dans le tableau • Cliquer "Recalculer Gantt" pour mettre à jour le graphique</div>
+        <div class="card-header">
+          <h2>📋 Tableau Planning — Dates Éditables</h2>
+          <div class="card-actions">
+            <button class="btn-export-sm btn-excel" onclick="exportTableExcel('tablePlanningSIA5', 'SIA5_Planning')">📊 Excel</button>
+          </div>
+        </div>
+        <div class="hint">💡 Modifier les dates → Gantt se met à jour automatiquement</div>
         <div class="table-wrapper"><table id="tablePlanningSIA5" class="table"></table></div>
-        <button id="btnRecalcGantt" class="btn-secondary" style="margin-top:12px;">🔄 Recalculer Gantt</button>
       </div>
     </div>
 
