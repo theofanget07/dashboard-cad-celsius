@@ -16,15 +16,15 @@
       <p class="hero-subtitle">Suivi financier multi-phase SIA 2 / 3 / 4 / 5 — Projet CL150096</p>
     </div>
     <div class="hero-actions">
-      <select id="pdfScope" class="pdf-select">
+      <select id="pdfPhaseSelect" class="pdf-select">
         <option value="recap">📊 Récapitulatif</option>
-        <option value="sia2">🔷 SIA 2</option>
-        <option value="sia3">🔶 SIA 3</option>
-        <option value="sia4">🔵 SIA 4</option>
-        <option value="sia5">🟢 SIA 5</option>
+        <option value="SIA2">🔷 SIA 2</option>
+        <option value="SIA3">🔶 SIA 3</option>
+        <option value="SIA4">🔵 SIA 4</option>
+        <option value="SIA5">🟢 SIA 5</option>
         <option value="all">📋 Toutes phases</option>
       </select>
-      <button id="btnPDF" class="btn-pdf">📄 Export PDF</button>
+      <button id="btnPDF" class="btn-pdf" onclick="exportPDF()">📄 Export PDF</button>
     </div>
   </div>
 </div>
@@ -35,10 +35,12 @@
     <div class="control-group">
       <label>📁 <strong>Prévisions</strong></label>
       <input type="file" id="prevFile" accept=".xlsx,.xls">
+      <span id="prevFileStatus" class="file-status"></span>
     </div>
     <div class="control-group">
       <label>📁 <strong>Réalisations</strong></label>
       <input type="file" id="realFile" accept=".xlsx,.xls">
+      <span id="realFileStatus" class="file-status"></span>
     </div>
     <div class="control-group">
       <label>⚙️ <strong>Coef. k</strong> <span class="hint-inline">(courbure S)</span></label>
@@ -50,8 +52,8 @@
     <div class="control-group">
       <label>📅 <strong>Vue temporelle</strong></label>
       <div class="toggle">
-        <label><input type="radio" name="view" id="viewGlobal" checked> Vue globale</label>
-        <label><input type="radio" name="view" id="viewSOnly"> S uniquement</label>
+        <label><input type="radio" name="viewMode" id="viewGlobal" checked> Vue globale</label>
+        <label><input type="radio" name="viewMode" id="viewSOnly"> S uniquement</label>
       </div>
     </div>
   </div>
@@ -77,7 +79,7 @@
       <div class="card-header">
         <h2>📈 Avancement par Phase</h2>
         <div class="card-actions">
-          <button class="btn-export-sm" onclick="exportChartPNG('recapBudgetChart')">📷 PNG</button>
+          <button class="btn-export-sm" onclick="exportChartPNG('recapBudgetChart', 'Recap_Budget_Chart')">📷 PNG</button>
         </div>
       </div>
       <div class="chart-wrapper-small"><canvas id="recapBudgetChart"></canvas></div>
@@ -98,7 +100,7 @@
       <div class="card-header">
         <h2>📊 Honoraires par Phase</h2>
         <div class="card-actions">
-          <button class="btn-export-sm" onclick="exportChartPNG('recapImputChart')">📷 PNG</button>
+          <button class="btn-export-sm" onclick="exportChartPNG('recapImputChart', 'Recap_Imput_Chart')">📷 PNG</button>
         </div>
       </div>
       <div class="chart-wrapper-small"><canvas id="recapImputChart"></canvas></div>
@@ -118,7 +120,7 @@
       <div class="card-header">
         <h2>📊 Gantt Global</h2>
         <div class="card-actions">
-          <button class="btn-export-sm" onclick="exportChartPNG('recapPlanningChart')">📷 PNG</button>
+          <button class="btn-export-sm" onclick="exportChartPNG('recapPlanningChart', 'Recap_Planning')">📷 PNG</button>
         </div>
       </div>
       <div class="chart-wrapper-gantt"><canvas id="recapPlanningChart"></canvas></div>
@@ -137,7 +139,7 @@
       <div class="card-header">
         <h2>📈 Courbes S — SIA 2</h2>
         <div class="card-actions">
-          <button class="btn-export-sm" onclick="exportChartPNG('chartSIA2')">📷 PNG</button>
+          <button class="btn-export-sm" onclick="exportChartPNG('chartSIA2', 'SIA2_Courbes')">📷 PNG</button>
         </div>
       </div>
       <div class="hint">💡 Budget Révisé (orange) • AT (bleu) • Réel cumulé (rouge) • Ligne rouge = Aujourd'hui</div>
@@ -170,7 +172,7 @@
         <div class="card-header">
           <h2>🍰 Répartition Budget Révisé</h2>
           <div class="card-actions">
-            <button class="btn-export-sm" onclick="exportChartPNG('pieSIA2BR')">📷 PNG</button>
+            <button class="btn-export-sm" onclick="exportChartPNG('pieSIA2BR', 'SIA2_Pie')">📷 PNG</button>
           </div>
         </div>
         <div class="chart-wrapper-small"><canvas id="pieSIA2BR"></canvas></div>
@@ -179,7 +181,7 @@
         <div class="card-header">
           <h2>📊 Avancement par Tâche</h2>
           <div class="card-actions">
-            <button class="btn-export-sm" onclick="exportChartPNG('barSIA2')">📷 PNG</button>
+            <button class="btn-export-sm" onclick="exportChartPNG('barSIA2', 'SIA2_Bar')">📷 PNG</button>
           </div>
         </div>
         <div class="chart-wrapper-small"><canvas id="barSIA2"></canvas></div>
@@ -203,7 +205,7 @@
       <div class="card-header">
         <h2>📊 Gantt SIA 2</h2>
         <div class="card-actions">
-          <button class="btn-export-sm" onclick="exportChartPNG('ganttSIA2')">📷 PNG</button>
+          <button class="btn-export-sm" onclick="exportChartPNG('ganttSIA2', 'SIA2_Gantt')">📷 PNG</button>
         </div>
       </div>
       <div class="chart-wrapper-gantt"><canvas id="ganttSIA2"></canvas></div>
@@ -222,7 +224,7 @@
       <div class="card-header">
         <h2>📈 Courbes S — SIA 3</h2>
         <div class="card-actions">
-          <button class="btn-export-sm" onclick="exportChartPNG('chartSIA3')">📷 PNG</button>
+          <button class="btn-export-sm" onclick="exportChartPNG('chartSIA3', 'SIA3_Courbes')">📷 PNG</button>
         </div>
       </div>
       <div class="hint">💡 Budget Révisé (orange) • AT (bleu) • Réel cumulé (rouge) • Ligne rouge = Aujourd'hui</div>
@@ -255,7 +257,7 @@
         <div class="card-header">
           <h2>🍰 Répartition Budget Révisé</h2>
           <div class="card-actions">
-            <button class="btn-export-sm" onclick="exportChartPNG('pieSIA3BR')">📷 PNG</button>
+            <button class="btn-export-sm" onclick="exportChartPNG('pieSIA3BR', 'SIA3_Pie')">📷 PNG</button>
           </div>
         </div>
         <div class="chart-wrapper-small"><canvas id="pieSIA3BR"></canvas></div>
@@ -264,7 +266,7 @@
         <div class="card-header">
           <h2>📊 Avancement par Tâche</h2>
           <div class="card-actions">
-            <button class="btn-export-sm" onclick="exportChartPNG('barSIA3')">📷 PNG</button>
+            <button class="btn-export-sm" onclick="exportChartPNG('barSIA3', 'SIA3_Bar')">📷 PNG</button>
           </div>
         </div>
         <div class="chart-wrapper-small"><canvas id="barSIA3"></canvas></div>
@@ -288,7 +290,7 @@
       <div class="card-header">
         <h2>📊 Gantt SIA 3</h2>
         <div class="card-actions">
-          <button class="btn-export-sm" onclick="exportChartPNG('ganttSIA3')">📷 PNG</button>
+          <button class="btn-export-sm" onclick="exportChartPNG('ganttSIA3', 'SIA3_Gantt')">📷 PNG</button>
         </div>
       </div>
       <div class="chart-wrapper-gantt"><canvas id="ganttSIA3"></canvas></div>
@@ -307,7 +309,7 @@
       <div class="card-header">
         <h2>📈 Courbes S — SIA 4</h2>
         <div class="card-actions">
-          <button class="btn-export-sm" onclick="exportChartPNG('chartSIA4')">📷 PNG</button>
+          <button class="btn-export-sm" onclick="exportChartPNG('chartSIA4', 'SIA4_Courbes')">📷 PNG</button>
         </div>
       </div>
       <div class="hint">💡 Budget Révisé (orange) • AT (bleu) • Réel cumulé (rouge) • Ligne rouge = Aujourd'hui</div>
@@ -340,7 +342,7 @@
         <div class="card-header">
           <h2>🍰 Répartition Budget Révisé</h2>
           <div class="card-actions">
-            <button class="btn-export-sm" onclick="exportChartPNG('pieSIA4BR')">📷 PNG</button>
+            <button class="btn-export-sm" onclick="exportChartPNG('pieSIA4BR', 'SIA4_Pie')">📷 PNG</button>
           </div>
         </div>
         <div class="chart-wrapper-small"><canvas id="pieSIA4BR"></canvas></div>
@@ -349,7 +351,7 @@
         <div class="card-header">
           <h2>📊 Avancement par Tâche</h2>
           <div class="card-actions">
-            <button class="btn-export-sm" onclick="exportChartPNG('barSIA4')">📷 PNG</button>
+            <button class="btn-export-sm" onclick="exportChartPNG('barSIA4', 'SIA4_Bar')">📷 PNG</button>
           </div>
         </div>
         <div class="chart-wrapper-small"><canvas id="barSIA4"></canvas></div>
@@ -373,7 +375,7 @@
       <div class="card-header">
         <h2>📊 Gantt SIA 4</h2>
         <div class="card-actions">
-          <button class="btn-export-sm" onclick="exportChartPNG('ganttSIA4')">📷 PNG</button>
+          <button class="btn-export-sm" onclick="exportChartPNG('ganttSIA4', 'SIA4_Gantt')">📷 PNG</button>
         </div>
       </div>
       <div class="chart-wrapper-gantt"><canvas id="ganttSIA4"></canvas></div>
@@ -400,7 +402,7 @@
         <div class="card-header">
           <h2>📈 Courbes S — SIA 5</h2>
           <div class="card-actions">
-            <button class="btn-export-sm" onclick="exportChartPNG('chartSIA5')">📷 PNG</button>
+            <button class="btn-export-sm" onclick="exportChartPNG('chartSIA5', 'SIA5_Courbes')">📷 PNG</button>
           </div>
         </div>
         <div class="hint">💡 Budget Révisé (orange) • AT (bleu) • Réel cumulé (rouge) • Ligne rouge = Aujourd'hui</div>
@@ -433,7 +435,7 @@
           <div class="card-header">
             <h2>🍰 Répartition Budget Révisé</h2>
             <div class="card-actions">
-              <button class="btn-export-sm" onclick="exportChartPNG('pieSIA5BR')">📷 PNG</button>
+              <button class="btn-export-sm" onclick="exportChartPNG('pieSIA5BR', 'SIA5_Pie')">📷 PNG</button>
             </div>
           </div>
           <div class="chart-wrapper-small"><canvas id="pieSIA5BR"></canvas></div>
@@ -442,7 +444,7 @@
           <div class="card-header">
             <h2>📊 Avancement par Sous-Projet</h2>
             <div class="card-actions">
-              <button class="btn-export-sm" onclick="exportChartPNG('barSIA5')">📷 PNG</button>
+              <button class="btn-export-sm" onclick="exportChartPNG('barSIA5', 'SIA5_Bar')">📷 PNG</button>
             </div>
           </div>
           <div class="chart-wrapper-small"><canvas id="barSIA5"></canvas></div>
@@ -459,7 +461,7 @@
         <div class="card-header">
           <h2>📊 Comparaison BR/AT/Réel par Métier</h2>
           <div class="card-actions">
-            <button class="btn-export-sm" onclick="exportChartPNG('barImputSIA5')">📷 PNG</button>
+            <button class="btn-export-sm" onclick="exportChartPNG('barImputSIA5', 'SIA5_Metier')">📷 PNG</button>
           </div>
         </div>
         <div class="hint">💡 Comparaison Budget Révisé / AT / Réel par type de métier</div>
@@ -485,7 +487,7 @@
         <div class="card-header">
           <h2>📊 Gantt SIA 5</h2>
           <div class="card-actions">
-            <button class="btn-export-sm" onclick="exportChartPNG('ganttSIA5')">📷 PNG</button>
+            <button class="btn-export-sm" onclick="exportChartPNG('ganttSIA5', 'SIA5_Gantt')">📷 PNG</button>
           </div>
         </div>
         <div class="hint">💡 Dates éditables dans le tableau ci-dessous • Recalcul automatique</div>
