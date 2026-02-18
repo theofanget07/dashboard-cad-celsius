@@ -1,8 +1,7 @@
 /* ============================================================
    Dashboard CAD — Groupe E Celsius
-   script.js  v4.3  — 18/02/2026
-   Fix Gantt: y=yLabels[idx] (string catégorique)
-   v4.3: barres Gantt plus épaisses (barPercentage 0.85, categoryPercentage 1.0)
+   script.js  v4.4  — 18/02/2026
+   Gantt: 3 datasets groupés, barThickness 18px fixe, centrage parfait
    ============================================================ */
 
 // ---- Globals ----
@@ -430,77 +429,126 @@ function buildTablePlanning(plan) {
 }
 
 // ============================================================
-// GANTT  v4.3  — barres épaisses : barPercentage 0.85, categoryPercentage 1.0
+// GANTT  v4.4
+// Approche : 3 datasets groupés (BR / AT / Réel), 1 point par projet.
+// barThickness en pixels = épaisseur absolue garantie + centrage natif Chart.js.
 // ============================================================
 function drawGantt(plan) {
   const allD = [];
-  PROJECT_ORDER.forEach(id => { const p=plan[id]; [p.brS,p.brE,p.atS,p.atE,p.rS,p.rE].forEach(d=>{if(d&&!isNaN(d))allD.push(d);}); });
-  if(!allD.length) return;
-
-  const minD = new Date(Math.min(...allD)), maxD = new Date(Math.max(...allD));
-  const span = Math.round((maxD-minD)/86400000)+30;
-  const toDay = d => d&&!isNaN(d) ? Math.round((d-minD)/86400000) : null;
-
-  // Labels Y catégoriques
-  const yLabels = [];
-  PROJECT_ORDER.forEach((id) => {
-    const n = getPN(id);
-    yLabels.push(`${n}  ▶ BR`);
-    yLabels.push(`${n}  ● AT`);
-    yLabels.push(`${n}  ■ Réel`);
+  PROJECT_ORDER.forEach(id => {
+    const p = plan[id];
+    [p.brS, p.brE, p.atS, p.atE, p.rS, p.rE].forEach(d => { if (d && !isNaN(d)) allD.push(d); });
   });
+  if (!allD.length) return;
 
-  // Datasets : y = label catégorique (string)
-  const datasets = [];
-  const pushBar = (label, s, e, color, yLabel) => {
-    if(!s||!e||isNaN(s)||isNaN(e)) return;
-    datasets.push({
-      label, data: [{ x: [toDay(s), toDay(e)], y: yLabel }],
-      backgroundColor: color+'dd', borderColor: color, borderWidth: 2, borderSkipped: false, borderRadius: 4
-    });
+  const minD = new Date(Math.min(...allD));
+  const maxD = new Date(Math.max(...allD));
+  const span = Math.round((maxD - minD) / 86400000) + 60;
+  const toDay = d => (d && !isNaN(d)) ? Math.round((d - minD) / 86400000) : null;
+
+  // Labels Y : un label par projet (les 3 barres s'empilent en groupement)
+  const yLabels = PROJECT_ORDER.map(id => getPN(id));
+
+  // Construction des 3 datasets
+  // Chaque dataset a un point par projet : { x: [start, end], y: nomProjet }
+  // Si une date manque, on met null pour que Chart.js saute ce point
+  const mkPoint = (s, e, label) => {
+    const s0 = toDay(s), e0 = toDay(e);
+    if (s0 === null || e0 === null) return { x: [null, null], y: label };
+    return { x: [s0, e0], y: label };
   };
 
-  PROJECT_ORDER.forEach((id, idx) => {
-    const p = plan[id], base = idx*3;
-    pushBar(`${p.name} — Budget Révisé`, p.brS, p.brE, GE_ORANGE, yLabels[base]);
-    pushBar(`${p.name} — AT`,              p.atS, p.atE, GE_BLUE2,  yLabels[base+1]);
-    pushBar(`${p.name} — Réel`,            p.rS,  p.rE,  GE_RED,    yLabels[base+2]);
-  });
+  const dsBR = {
+    label: 'Budget Révisé',
+    data: PROJECT_ORDER.map(id => mkPoint(plan[id].brS, plan[id].brE, getPN(id))),
+    backgroundColor: GE_ORANGE + 'cc',
+    borderColor: GE_ORANGE,
+    borderWidth: 2,
+    borderSkipped: false,
+    borderRadius: 3,
+    barThickness: 18          // épaisseur fixe en pixels
+  };
+  const dsAT = {
+    label: 'AT',
+    data: PROJECT_ORDER.map(id => mkPoint(plan[id].atS, plan[id].atE, getPN(id))),
+    backgroundColor: GE_BLUE2 + 'cc',
+    borderColor: GE_BLUE2,
+    borderWidth: 2,
+    borderSkipped: false,
+    borderRadius: 3,
+    barThickness: 18
+  };
+  const dsReal = {
+    label: 'Réel',
+    data: PROJECT_ORDER.map(id => mkPoint(plan[id].rS, plan[id].rE, getPN(id))),
+    backgroundColor: GE_RED + 'cc',
+    borderColor: GE_RED,
+    borderWidth: 2,
+    borderSkipped: false,
+    borderRadius: 3,
+    barThickness: 18
+  };
 
-  if(datasets.length === 0) return;
-  const tickStep = Math.max(30, Math.round(span/12));
-  if(chartGantt) chartGantt.destroy();
+  const tickStep = Math.max(30, Math.round(span / 12));
+  if (chartGantt) chartGantt.destroy();
 
   chartGantt = new Chart(document.getElementById('chartGantt').getContext('2d'), {
     type: 'bar',
-    data: { labels: yLabels, datasets },
+    data: { labels: yLabels, datasets: [dsBR, dsAT, dsReal] },
     options: {
-      indexAxis: 'y', responsive: true, maintainAspectRatio: false,
-      // ---- v4.3 : barres plus épaisses ----
-      barPercentage: 0.85,
-      categoryPercentage: 1.0,
-      // -------------------------------------
+      indexAxis: 'y',
+      responsive: true,
+      maintainAspectRatio: false,
       plugins: {
-        legend: { display: false },
-        tooltip: { callbacks: {
-          title: ctx => ctx[0].dataset.label,
-          label: ctx => {
-            const [d0,d1] = ctx.parsed.x;
-            const sD = new Date(minD.getTime()+d0*86400000), eD = new Date(minD.getTime()+d1*86400000);
-            const dur = Math.round((eD-sD)/86400000);
-            return [`Début : ${sD.toLocaleDateString('fr-CH')}`,`Fin   : ${eD.toLocaleDateString('fr-CH')}`,`Durée : ${dur} jours`];
+        legend: {
+          display: true,
+          position: 'top',
+          labels: { usePointStyle: true, padding: 16, font: { size: 12, weight: '600' } }
+        },
+        tooltip: {
+          callbacks: {
+            title: ctx => `${ctx[0].label} — ${ctx[0].dataset.label}`,
+            label: ctx => {
+              const [d0, d1] = ctx.parsed.x;
+              if (d0 === null || d1 === null) return 'Pas de données';
+              const sD = new Date(minD.getTime() + d0 * 86400000);
+              const eD = new Date(minD.getTime() + d1 * 86400000);
+              const dur = Math.round((eD - sD) / 86400000);
+              return [
+                `Début : ${sD.toLocaleDateString('fr-CH')}`,
+                `Fin   : ${eD.toLocaleDateString('fr-CH')}`,
+                `Durée : ${dur} jours`
+              ];
+            }
           }
-        }}
+        }
       },
       scales: {
-        x: { type: 'linear', min: 0, max: span, title: { display: true, text: 'Timeline' }, grid: { color: 'rgba(0,0,0,0.06)' },
-          ticks: { stepSize: tickStep, callback: value => { const d = new Date(minD.getTime()+value*86400000); return d.toLocaleDateString('fr-CH',{month:'short',year:'2-digit'}); } }
-        },
-        y: { type: 'category', labels: yLabels, offset: true,
-          grid: { color: ctx => { const idx = ctx.index; return (idx>0 && idx%3===0) ? 'rgba(22,58,95,0.25)' : 'rgba(0,0,0,0.04)'; }, lineWidth: ctx => (ctx.index>0 && ctx.index%3===0) ? 2 : 1 },
+        x: {
+          type: 'linear',
+          min: 0,
+          max: span,
+          title: { display: true, text: 'Timeline' },
+          grid: { color: 'rgba(0,0,0,0.06)' },
           ticks: {
-            font: ctx => { const i = yLabels.indexOf(ctx.tick.label); return (i>=0 && i%3===0) ? {weight:'bold',size:11} : {size:10}; },
-            color: ctx => { const i = yLabels.indexOf(ctx.tick.label); return (i>=0 && i%3===0) ? '#163a5f' : '#5a7a9a'; }
+            stepSize: tickStep,
+            callback: value => {
+              const d = new Date(minD.getTime() + value * 86400000);
+              return d.toLocaleDateString('fr-CH', { month: 'short', year: '2-digit' });
+            }
+          }
+        },
+        y: {
+          type: 'category',
+          labels: yLabels,
+          offset: true,
+          grid: {
+            color: 'rgba(0,0,0,0.08)',
+            lineWidth: 1
+          },
+          ticks: {
+            font: { weight: 'bold', size: 11 },
+            color: '#163a5f'
           }
         }
       }
@@ -531,7 +579,7 @@ function exportTableXLSX(tableId, sheetName) {
 window.exportTableXLSX = exportTableXLSX;
 
 // ============================================================
-// PDF  v4.3
+// PDF  v4.4
 // ============================================================
 async function generatePDF() {
   const { jsPDF } = window.jspdf;
