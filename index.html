@@ -454,14 +454,26 @@
     <div class="subtab-content" id="sia5-imput">
       <div class="section-title"><h2>💼 IMPUTATIONS — Phase SIA 5</h2></div>
       <div id="kpiSectionImpSIA5" class="kpi-section"></div>
+      
       <div class="card">
         <div class="card-header">
-          <h2>📋 Honoraires par Sous-Projet</h2>
+          <h2>📊 Comparaison BR/AT/Réel par Métier</h2>
+          <div class="card-actions">
+            <button class="btn-export-sm" onclick="exportChartPNG('barImputSIA5')">📷 PNG</button>
+          </div>
+        </div>
+        <div class="hint">💡 Comparaison Budget Révisé / AT / Réel par type de métier</div>
+        <div class="chart-wrapper-small"><canvas id="barImputSIA5"></canvas></div>
+      </div>
+
+      <div class="card">
+        <div class="card-header">
+          <h2>📋 Honoraires par Métier</h2>
           <div class="card-actions">
             <button class="btn-export-sm btn-excel" onclick="exportTableExcel('tableImputSIA5', 'SIA5_Honoraires')">📊 Excel</button>
           </div>
         </div>
-        <div class="hint">💡 Distinction Interne/Externe • Uniquement honoraires • Comparaison BR / AT / Réel</div>
+        <div class="hint">💡 Regroupement par métier transversal • Distinction Interne/Externe • Comparaison BR / AT / Réel</div>
         <div class="table-wrapper"><table id="tableImputSIA5" class="table"></table></div>
       </div>
     </div>
@@ -478,9 +490,9 @@
         </div>
         <div class="hint">💡 Dates éditables dans le tableau ci-dessous • Recalcul automatique</div>
         <div class="gantt-legend">
-          <span><span class="gantt-dot" style="background:#e8873a;"></span>Budget Révisé</span>
-          <span><span class="gantt-dot" style="background:#163a5f;"></span>AT</span>
-          <span><span class="gantt-dot" style="background:#c0392b;"></span>Réel</span>
+          <span><span class="gantt-dot" style="background:#e8873a;"></span>Projeté BR</span>
+          <span><span class="gantt-dot" style="background:#163a5f;"></span>Projeté AT</span>
+          <span><span class="gantt-dot" style="background:#c0392b;"></span>Réel (constaté)</span>
         </div>
         <div class="chart-wrapper-gantt"><canvas id="ganttSIA5"></canvas></div>
       </div>
@@ -491,7 +503,7 @@
             <button class="btn-export-sm btn-excel" onclick="exportTableExcel('tablePlanningSIA5', 'SIA5_Planning')">📊 Excel</button>
           </div>
         </div>
-        <div class="hint">💡 Modifier les dates → Gantt se met à jour automatiquement</div>
+        <div class="hint">💡 Modifier les dates projetées → Gantt se met à jour automatiquement</div>
         <div class="table-wrapper"><table id="tablePlanningSIA5" class="table"></table></div>
       </div>
     </div>
