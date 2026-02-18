@@ -10,239 +10,306 @@
 
 <!-- ═══════════════════ HERO ═══════════════════ -->
 <div class="hero">
-  <div class="hero-left">
-    <h1>📊 Dashboard CAD — Groupe E Celsius</h1>
-    <p class="hero-subtitle">Suivi financier multi-phase SIA 2 / 3 / 4 / 5 — Projet CL150096</p>
-  </div>
-  <div class="hero-right">
-    <select id="pdfScope" class="pdf-select">
-      <option value="recap">📊 Récapitulatif</option>
-      <option value="sia2">🔷 SIA 2</option>
-      <option value="sia3">🔶 SIA 3</option>
-      <option value="sia4">🔵 SIA 4</option>
-      <option value="sia5">🟢 SIA 5</option>
-      <option value="all">📋 Toutes phases</option>
-    </select>
-    <button id="btnPDF">📄 Export PDF</button>
-  </div>
-</div>
-
-<!-- ═══════════════════ UPLOAD ZONE ═══════════════════ -->
-<div class="upload-zone">
-  <div class="upload-card">
-    <label class="upload-label">
-      📁 <strong>Prévisions</strong>
-      <span class="upload-hint">Prevision_*.xlsx (Budget / Budget_Rev / AT)</span>
-    </label>
-    <input type="file" id="prevFile" accept=".xlsx,.xls">
-    <span id="prevStatus" class="file-status"></span>
-  </div>
-  <div class="upload-card">
-    <label class="upload-label">
-      📁 <strong>Réalisations</strong>
-      <span class="upload-hint">Transactions-de-projet_*.xlsx</span>
-    </label>
-    <input type="file" id="realFile" accept=".xlsx,.xls">
-    <span id="realStatus" class="file-status"></span>
-  </div>
-  <div class="upload-card controls-card">
-    <label class="upload-label">⚙️ <strong>Paramètres</strong></label>
-    <div class="k-controls">
-      <label>Coef. k <span class="k-hint">(courbure S)</span></label>
-      <input type="range" id="coefK" min="4" max="20" value="12">
-      <input type="number" id="coefK_num" min="4" max="20" value="12" style="width:55px">
+  <div class="hero-content">
+    <div>
+      <h1>📊 Dashboard CAD — Groupe E Celsius</h1>
+      <p class="hero-subtitle">Suivi financier multi-phase SIA 2 / 3 / 4 / 5 — Projet CL150096</p>
     </div>
-    <div class="view-controls">
-      <label><input type="radio" name="viewMode" id="viewGlobal" checked> Vue globale</label>
-      <label><input type="radio" name="viewMode" id="viewSOnly"> S uniquement</label>
+    <div class="hero-actions">
+      <select id="pdfScope" class="pdf-select">
+        <option value="recap">📊 Récapitulatif</option>
+        <option value="sia2">🔷 SIA 2</option>
+        <option value="sia3">🔶 SIA 3</option>
+        <option value="sia4">🔵 SIA 4</option>
+        <option value="sia5">🟢 SIA 5</option>
+        <option value="all">📋 Toutes phases</option>
+      </select>
+      <button id="btnPDF" class="btn-pdf">📄 Export PDF</button>
     </div>
   </div>
 </div>
 
-<div id="status" class="status-bar"></div>
-
-<!-- ═══════════════════ NAVIGATION TABS ═══════════════════ -->
-<div class="tabs-container">
-  <div class="tabs" id="mainTabs">
-    <button class="tab-btn active" data-tab="recap">📊 Récapitulatif</button>
-    <button class="tab-btn" data-tab="sia2">🔷 SIA 2</button>
-    <button class="tab-btn" data-tab="sia3">🔶 SIA 3</button>
-    <button class="tab-btn" data-tab="sia4">🔵 SIA 4</button>
-    <button class="tab-btn" data-tab="sia5">🟢 SIA 5</button>
-  </div>
+<!-- ═══════════════════ TABS ═══════════════════ -->
+<div class="tabs">
+  <button class="tab-btn active" data-tab="recap">📊 Récapitulatif</button>
+  <button class="tab-btn" data-tab="sia2">🔷 SIA 2</button>
+  <button class="tab-btn" data-tab="sia3">🔶 SIA 3</button>
+  <button class="tab-btn" data-tab="sia4">🔵 SIA 4</button>
+  <button class="tab-btn" data-tab="sia5">🟢 SIA 5</button>
 </div>
 
 <!-- ═══════════════════ ONGLET RÉCAPITULATIF ═══════════════════ -->
-<div class="tab-content active" id="tab-recap">
-  <div id="kpiSectionRecap" class="kpi-section" style="display:none"></div>
-  <div class="card">
-    <h2>📋 Comparatif par phase</h2>
-    <div class="table-wrapper">
-      <table id="tableRecap" class="data-table"></table>
-    </div>
-  </div>
-  <div class="charts-grid">
+<div class="tab-content active" id="recap">
+  <div class="container">
+    
+    <!-- Upload -->
     <div class="card">
-      <h2>📊 Budget Révisé par phase</h2>
-      <div class="chart-wrapper"><canvas id="chartRecapBar"></canvas></div>
+      <div class="card-header">
+        <h2>📁 Fichiers Excel</h2>
+      </div>
+      <div class="grid-4" style="grid-template-columns: 1fr 1fr 1fr 1fr;">
+        <div class="form-col">
+          <label>Prévisions (.xlsx)</label>
+          <input type="file" id="prevFile" accept=".xlsx,.xls">
+        </div>
+        <div class="form-col">
+          <label>Réalisations (.xlsx)</label>
+          <input type="file" id="realFile" accept=".xlsx,.xls">
+        </div>
+        <div class="form-col">
+          <label>Coef. k (courbure S)</label>
+          <div class="k-wrap">
+            <input type="range" id="coefK" min="4" max="20" value="12">
+            <input type="number" id="coefK_num" min="4" max="20" value="12">
+          </div>
+        </div>
+        <div class="form-col">
+          <label>Vue temporelle</label>
+          <div class="toggle">
+            <label><input type="radio" name="view" id="viewGlobal" checked> 📅 Vue globale</label>
+            <label><input type="radio" name="view" id="viewSOnly"> 📐 S uniquement</label>
+          </div>
+        </div>
+      </div>
+      <div id="status" class="status">⏳ En attente des fichiers...</div>
     </div>
+
+    <!-- RECAP : 3 SECTIONS -->
+    <div class="section-title"><h2>💰 RÉCAPITULATIF BUDGETS — Toutes Phases</h2></div>
+    <div id="recapBudgetKPI" class="kpi-section"></div>
+    <div class="card"><canvas id="recapBudgetChart"></canvas></div>
     <div class="card">
-      <h2>🍰 Répartition AT global</h2>
-      <div class="chart-wrapper"><canvas id="chartRecapPie"></canvas></div>
+      <h2>📋 Tableau comparatif par phase</h2>
+      <div class="table-wrapper"><table id="recapBudgetTable" class="table"></table></div>
     </div>
+
+    <div class="section-title"><h2>💼 RÉCAPITULATIF IMPUTATIONS — Honoraires Toutes Phases</h2></div>
+    <div id="recapImputKPI" class="kpi-section"></div>
+    <div class="card"><canvas id="recapImputChart"></canvas></div>
+    <div class="card">
+      <h2>📋 Tableau honoraires par phase</h2>
+      <div class="table-wrapper"><table id="recapImputTable" class="table"></table></div>
+    </div>
+
+    <div class="section-title"><h2>📅 RÉCAPITULATIF PLANNING — Toutes Phases</h2></div>
+    <div class="card">
+      <h2>📊 Gantt Global</h2>
+      <div class="chart-wrapper-gantt"><canvas id="recapPlanningChart"></canvas></div>
+    </div>
+
   </div>
 </div>
 
 <!-- ═══════════════════ ONGLET SIA 2 ═══════════════════ -->
-<div class="tab-content" id="tab-sia2">
-  <div id="kpiSectionSIA2" class="kpi-section" style="display:none"></div>
-  <div class="card">
-    <h2>📈 Courbes S — Phase SIA 2 (Avant-Projet)</h2>
-    <div class="chart-wrapper"><canvas id="chartSIA2"></canvas></div>
-  </div>
-  <div class="card">
-    <h2>📋 Budgets SIA 2 par ID Projet</h2>
-    <div class="table-wrapper"><table id="tableSIA2" class="data-table"></table></div>
-  </div>
-  <div class="charts-grid">
+<div class="tab-content" id="sia2">
+  <div class="container">
+    
+    <div class="section-title"><h2>💰 BUDGETS — Phase SIA 2</h2></div>
+    <div id="kpiSectionSIA2" class="kpi-section"></div>
     <div class="card">
-      <h2>🍰 Répartition Budget Révisé</h2>
-      <div class="chart-wrapper-sm"><canvas id="pieSIA2BR"></canvas></div>
+      <h2>📈 Courbes S — SIA 2</h2>
+      <div class="hint">💡 Budget Révisé (orange) • AT (bleu) • Réel cumulé (rouge)</div>
+      <div class="chart-wrapper"><canvas id="chartSIA2"></canvas></div>
     </div>
     <div class="card">
-      <h2>📊 Avancement vs AT</h2>
-      <div class="chart-wrapper-sm"><canvas id="barSIA2"></canvas></div>
+      <h2>📋 Budgets par Tâche</h2>
+      <div class="table-wrapper"><table id="tableSIA2Budget" class="table"></table></div>
     </div>
+    <div class="charts-grid">
+      <div class="card">
+        <h2>🍰 Répartition Budget Révisé</h2>
+        <div class="chart-wrapper-small"><canvas id="pieSIA2BR"></canvas></div>
+      </div>
+      <div class="card">
+        <h2>📊 Avancement par Tâche</h2>
+        <div class="chart-wrapper-small"><canvas id="barSIA2"></canvas></div>
+      </div>
+    </div>
+
+    <div class="section-title"><h2>💼 IMPUTATIONS — Phase SIA 2</h2></div>
+    <div id="kpiSectionImpSIA2" class="kpi-section"></div>
+    <div class="card">
+      <h2>📋 Honoraires par Tâche (Interne / Externe)</h2>
+      <div class="table-wrapper"><table id="tableImputSIA2" class="table"></table></div>
+    </div>
+
+    <div class="section-title"><h2>📅 PLANNING — Phase SIA 2</h2></div>
+    <div class="card">
+      <h2>📊 Gantt SIA 2</h2>
+      <div class="chart-wrapper-gantt"><canvas id="ganttSIA2"></canvas></div>
+    </div>
+
   </div>
 </div>
 
 <!-- ═══════════════════ ONGLET SIA 3 ═══════════════════ -->
-<div class="tab-content" id="tab-sia3">
-  <div id="kpiSectionSIA3" class="kpi-section" style="display:none"></div>
-  <div class="card">
-    <h2>📈 Courbes S — Phase SIA 3 (Projet de Réalisation)</h2>
-    <div class="chart-wrapper"><canvas id="chartSIA3"></canvas></div>
-  </div>
-  <div class="card">
-    <h2>📋 Budgets SIA 3 par ID Projet</h2>
-    <div class="table-wrapper"><table id="tableSIA3" class="data-table"></table></div>
-  </div>
-  <div class="charts-grid">
+<div class="tab-content" id="sia3">
+  <div class="container">
+    
+    <div class="section-title"><h2>💰 BUDGETS — Phase SIA 3</h2></div>
+    <div id="kpiSectionSIA3" class="kpi-section"></div>
     <div class="card">
-      <h2>🍰 Répartition Budget Révisé</h2>
-      <div class="chart-wrapper-sm"><canvas id="pieSIA3BR"></canvas></div>
+      <h2>📈 Courbes S — SIA 3</h2>
+      <div class="hint">💡 Budget Révisé (orange) • AT (bleu) • Réel cumulé (rouge)</div>
+      <div class="chart-wrapper"><canvas id="chartSIA3"></canvas></div>
     </div>
     <div class="card">
-      <h2>📊 Avancement vs AT</h2>
-      <div class="chart-wrapper-sm"><canvas id="barSIA3"></canvas></div>
+      <h2>📋 Budgets par Tâche</h2>
+      <div class="table-wrapper"><table id="tableSIA3Budget" class="table"></table></div>
     </div>
+    <div class="charts-grid">
+      <div class="card">
+        <h2>🍰 Répartition Budget Révisé</h2>
+        <div class="chart-wrapper-small"><canvas id="pieSIA3BR"></canvas></div>
+      </div>
+      <div class="card">
+        <h2>📊 Avancement par Tâche</h2>
+        <div class="chart-wrapper-small"><canvas id="barSIA3"></canvas></div>
+      </div>
+    </div>
+
+    <div class="section-title"><h2>💼 IMPUTATIONS — Phase SIA 3</h2></div>
+    <div id="kpiSectionImpSIA3" class="kpi-section"></div>
+    <div class="card">
+      <h2>📋 Honoraires par Tâche (Interne / Externe)</h2>
+      <div class="table-wrapper"><table id="tableImputSIA3" class="table"></table></div>
+    </div>
+
+    <div class="section-title"><h2>📅 PLANNING — Phase SIA 3</h2></div>
+    <div class="card">
+      <h2>📊 Gantt SIA 3</h2>
+      <div class="chart-wrapper-gantt"><canvas id="ganttSIA3"></canvas></div>
+    </div>
+
   </div>
 </div>
 
 <!-- ═══════════════════ ONGLET SIA 4 ═══════════════════ -->
-<div class="tab-content" id="tab-sia4">
-  <div id="kpiSectionSIA4" class="kpi-section" style="display:none"></div>
-  <div class="card">
-    <h2>📈 Courbes S — Phase SIA 4 (Appels d'Offres)</h2>
-    <div class="chart-wrapper"><canvas id="chartSIA4"></canvas></div>
-  </div>
-  <div class="card">
-    <h2>📋 Budgets SIA 4 par ID Projet</h2>
-    <div class="table-wrapper"><table id="tableSIA4" class="data-table"></table></div>
-  </div>
-  <div class="charts-grid">
+<div class="tab-content" id="sia4">
+  <div class="container">
+    
+    <div class="section-title"><h2>💰 BUDGETS — Phase SIA 4</h2></div>
+    <div id="kpiSectionSIA4" class="kpi-section"></div>
     <div class="card">
-      <h2>🍰 Répartition Budget Révisé</h2>
-      <div class="chart-wrapper-sm"><canvas id="pieSIA4BR"></canvas></div>
+      <h2>📈 Courbes S — SIA 4</h2>
+      <div class="hint">💡 Budget Révisé (orange) • AT (bleu) • Réel cumulé (rouge)</div>
+      <div class="chart-wrapper"><canvas id="chartSIA4"></canvas></div>
     </div>
     <div class="card">
-      <h2>📊 Avancement vs AT</h2>
-      <div class="chart-wrapper-sm"><canvas id="barSIA4"></canvas></div>
+      <h2>📋 Budgets par Tâche</h2>
+      <div class="table-wrapper"><table id="tableSIA4Budget" class="table"></table></div>
     </div>
+    <div class="charts-grid">
+      <div class="card">
+        <h2>🍰 Répartition Budget Révisé</h2>
+        <div class="chart-wrapper-small"><canvas id="pieSIA4BR"></canvas></div>
+      </div>
+      <div class="card">
+        <h2>📊 Avancement par Tâche</h2>
+        <div class="chart-wrapper-small"><canvas id="barSIA4"></canvas></div>
+      </div>
+    </div>
+
+    <div class="section-title"><h2>💼 IMPUTATIONS — Phase SIA 4</h2></div>
+    <div id="kpiSectionImpSIA4" class="kpi-section"></div>
+    <div class="card">
+      <h2>📋 Honoraires par Tâche (Interne / Externe)</h2>
+      <div class="table-wrapper"><table id="tableImputSIA4" class="table"></table></div>
+    </div>
+
+    <div class="section-title"><h2>📅 PLANNING — Phase SIA 4</h2></div>
+    <div class="card">
+      <h2>📊 Gantt SIA 4</h2>
+      <div class="chart-wrapper-gantt"><canvas id="ganttSIA4"></canvas></div>
+    </div>
+
   </div>
 </div>
 
 <!-- ═══════════════════ ONGLET SIA 5 ═══════════════════ -->
-<div class="tab-content" id="tab-sia5">
-  <!-- Sous-tabs SIA 5 -->
-  <div class="sub-tabs">
-    <button class="sub-tab-btn active" data-subtab="sia5-report">📈 Rapport Financier</button>
-    <button class="sub-tab-btn" data-subtab="sia5-imput">💼 Imputations</button>
-    <button class="sub-tab-btn" data-subtab="sia5-plan">📅 Planning</button>
-  </div>
+<div class="tab-content" id="sia5">
+  <div class="container">
+    
+    <!-- SOUS-ONGLETS SIA 5 -->
+    <div class="subtabs">
+      <button class="subtab-btn active" data-subtab="sia5-budget">📈 Rapport Financier</button>
+      <button class="subtab-btn" data-subtab="sia5-imput">💼 Imputations</button>
+      <button class="subtab-btn" data-subtab="sia5-plan">📅 Planning</button>
+    </div>
 
-  <!-- Sous-onglet Rapport Financier -->
-  <div class="sub-tab-content active" id="sia5-report">
-    <div id="kpiSection" class="kpi-section" style="display:none"></div>
-    <div class="card">
-      <h2>📈 Courbes S — Phase SIA 5 (Réalisation)</h2>
-      <p class="card-hint">💡 Recommandations k : 6–8 (linéaires/études) • 10–14 (CAPEX réseau/GC) • 14–18 (projets courts/rapides)</p>
-      <p class="card-hint">💡 Chaque courbe (Budget, Budget Révisé, AT) utilise ses propres dates de début/fin</p>
-      <div class="chart-wrapper"><canvas id="chart"></canvas></div>
-    </div>
-    <div class="card">
-      <h2>📋 Récapitulatif budgets SIA 5 par sous-projet</h2>
-      <div class="table-wrapper"><table id="tablePreview" class="data-table"></table></div>
-    </div>
-    <div class="charts-grid">
+    <!-- ═══ SOUS-ONGLET: BUDGET ═══ -->
+    <div class="subtab-content active" id="sia5-budget">
+      <div class="section-title"><h2>💰 BUDGETS — Phase SIA 5</h2></div>
+      <div id="kpiSectionSIA5" class="kpi-section"></div>
       <div class="card">
-        <h2>🍰 Répartition Budget Révisé (SIA 5)</h2>
-        <div class="chart-wrapper-sm"><canvas id="chartPieBudgetRev"></canvas></div>
+        <h2>📈 Courbes S — SIA 5</h2>
+        <div class="hint">💡 Budget Révisé (orange) • AT (bleu) • Réel cumulé (rouge)</div>
+        <div class="chart-wrapper"><canvas id="chartSIA5"></canvas></div>
+      </div>
+      
+      <!-- NOUVEAU : Tableau mois par mois -->
+      <div class="card">
+        <h2>📊 Tableau Mensuel — Budget Révisé vs Réel</h2>
+        <div class="hint">💡 Projection S • Cumul projeté • Réel mensuel • Cumul réel • Écarts</div>
+        <div class="table-wrapper"><table id="tableSIA5Monthly" class="table"></table></div>
+      </div>
+
+      <div class="card">
+        <h2>📋 Budgets par Sous-Projet</h2>
+        <div class="table-wrapper"><table id="tableSIA5Budget" class="table"></table></div>
+      </div>
+      <div class="charts-grid">
+        <div class="card">
+          <h2>🍰 Répartition Budget Révisé</h2>
+          <div class="chart-wrapper-small"><canvas id="pieSIA5BR"></canvas></div>
+        </div>
+        <div class="card">
+          <h2>📊 Avancement par Sous-Projet</h2>
+          <div class="chart-wrapper-small"><canvas id="barSIA5"></canvas></div>
+        </div>
+      </div>
+    </div>
+
+    <!-- ═══ SOUS-ONGLET: IMPUTATIONS ═══ -->
+    <div class="subtab-content" id="sia5-imput">
+      <div class="section-title"><h2>💼 IMPUTATIONS — Phase SIA 5</h2></div>
+      <div id="kpiSectionImpSIA5" class="kpi-section"></div>
+      <div class="card">
+        <h2>📋 Honoraires par Sous-Projet (Interne / Externe)</h2>
+        <div class="hint">💡 Distinction Interne/Externe • Uniquement honoraires • Comparaison BR / AT / Réel</div>
+        <div class="table-wrapper"><table id="tableImputSIA5" class="table"></table></div>
+      </div>
+    </div>
+
+    <!-- ═══ SOUS-ONGLET: PLANNING ═══ -->
+    <div class="subtab-content" id="sia5-plan">
+      <div class="section-title"><h2>📅 PLANNING — Phase SIA 5</h2></div>
+      <div class="card">
+        <h2>📊 Gantt SIA 5 — 6 Sous-Projets</h2>
+        <div class="hint">💡 Dates éditables dans le tableau ci-dessous • Cliquer "Recalculer Gantt" après modification</div>
+        <div class="gantt-legend">
+          <span><span class="gantt-dot" style="background:#e8873a;"></span>Budget Révisé</span>
+          <span><span class="gantt-dot" style="background:#163a5f;"></span>AT</span>
+          <span><span class="gantt-dot" style="background:#c0392b;"></span>Réel</span>
+        </div>
+        <div class="chart-wrapper-gantt"><canvas id="ganttSIA5"></canvas></div>
       </div>
       <div class="card">
-        <h2>🍰 Répartition AT (SIA 5)</h2>
-        <div class="chart-wrapper-sm"><canvas id="chartPieAT"></canvas></div>
+        <h2>📋 Tableau Planning — Dates Éditables</h2>
+        <div class="hint">💡 Modifier les dates dans le tableau • Cliquer "Recalculer Gantt" pour mettre à jour le graphique</div>
+        <div class="table-wrapper"><table id="tablePlanningSIA5" class="table"></table></div>
+        <button id="btnRecalcGantt" class="btn-secondary" style="margin-top:12px;">🔄 Recalculer Gantt</button>
       </div>
     </div>
-    <div class="card">
-      <h2>📊 Avancement par sous-projet (Budget Révisé vs Réel)</h2>
-      <p class="card-hint">💡 Orange = Budget Révisé • Bleu foncé = AT • Rouge = Réel</p>
-      <div class="chart-wrapper"><canvas id="chartBar"></canvas></div>
-    </div>
-    <div class="card">
-      <h2>📋 Tableau comparatif détaillé SIA 5</h2>
-      <div class="table-wrapper"><table id="tableCompare" class="data-table"></table></div>
-    </div>
-  </div>
 
-  <!-- Sous-onglet Imputations -->
-  <div class="sub-tab-content" id="sia5-imput">
-    <div id="kpiSectionHonoraires" class="kpi-section" style="display:none"></div>
-    <div class="card">
-      <h2>💼 Honoraires par métier</h2>
-      <p class="card-hint">💡 Honoraires internes et externes séparés — Totaux cumulés par ressource — Uniquement lignes «Honoraires»</p>
-      <div class="chart-wrapper"><canvas id="chartHonoMetier"></canvas></div>
-    </div>
-    <div class="card">
-      <h2>📋 Ressources Internes / Externes</h2>
-      <div class="table-wrapper"><table id="tableRessources" class="data-table"></table></div>
-    </div>
-  </div>
-
-  <!-- Sous-onglet Planning -->
-  <div class="sub-tab-content" id="sia5-plan">
-    <div class="card planning-editor-card">
-      <h2>✏️ Ajustement Planning Réel (optionnel)</h2>
-      <p class="card-hint">💡 Champs <strong>Réel Début/Fin</strong> pré-remplis depuis les imputations. Modifiables manuellement puis <strong>Recalculer Gantt</strong>.</p>
-      <div id="planningInputs" class="planning-inputs"></div>
-      <button id="btnApplyPlanning" class="btn-secondary">🔄 Recalculer Gantt</button>
-    </div>
-    <div class="card">
-      <h2>📅 Gantt — SIA 5 (6 sous-projets)</h2>
-      <div class="chart-wrapper-gantt"><canvas id="chartGantt"></canvas></div>
-    </div>
-    <div class="card">
-      <h2>📋 Tableau Planning</h2>
-      <div class="table-wrapper"><table id="tablePlanning" class="data-table"></table></div>
-    </div>
   </div>
 </div>
 
-<!-- CDN Libraries -->
 <script src="https://cdn.jsdelivr.net/npm/xlsx@0.18.5/dist/xlsx.full.min.js"></script>
 <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.0/dist/chart.umd.min.js"></script>
 <script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js"></script>
 <script src="https://cdnjs.cloudflare.com/ajax/libs/html2canvas/1.4.1/html2canvas.min.js"></script>
 <script src="script.js"></script>
+
 </body>
 </html>
