@@ -12,23 +12,22 @@
 <body>
   <div class="hero">
     <h1>📊 Dashboard Suivi Projets CAD</h1>
-    <p class="hero-subtitle">Groupe E Celsius - Gestion des Coûts & Prévisions</p>
+    <p class="hero-subtitle">Groupe E Celsius — Gestion des Coûts &amp; Prévisions</p>
   </div>
 
   <div class="tabs">
-    <button class="tab-btn active" data-tab="tab1">📈 Rapport Financier</button>
-    <button class="tab-btn" data-tab="tab2">💼 Imputations</button>
-    <button class="tab-btn" data-tab="tab3">📅 Planning</button>
+    <button class="tab-btn active" data-tab="tabSIA5">📋 SIA 5 — Réalisation</button>
   </div>
 
   <div class="container">
-    
-    <!-- ONGLET 1: RAPPORT FINANCIER -->
-    <div id="tab1" class="tab-content active">
+
+    <!-- ONGLET UNIQUE SIA 5 -->
+    <div id="tabSIA5" class="tab-content active">
+
+      <!-- ===== SECTION IMPORT & CONFIG ===== -->
       <div class="card">
-        <h2>⚙️ Configuration & Import</h2>
+        <h2>⚙️ Configuration &amp; Import</h2>
         <p class="hint">💡 <strong>Recommandations k :</strong> 6–8 (linéaires/études) • 10–14 (CAPEX réseau/GC) • 14–18 (projets courts/rapides)</p>
-        
         <div class="grid-4">
           <div class="form-col">
             <label for="prevFile">📁 Prévisions (Excel)</label>
@@ -53,7 +52,6 @@
             </div>
           </div>
         </div>
-
         <div class="actions-grid">
           <button id="btnExportPNG" class="btn-primary">📸 Graphique (PNG)</button>
           <button id="btnExportTablesPNG" class="btn-primary">🖼️ Tableaux (PNG)</button>
@@ -63,10 +61,18 @@
         <div class="status" id="status">⏳ En attente des fichiers...</div>
       </div>
 
+      <!-- ===== PARTIE 1: BUDGETS ===== -->
+      <div class="section-title"><h2>💰 PARTIE 1 — Budgets SIA 5</h2></div>
+
       <div id="kpiSection" class="kpi-section" style="display:none;">
         <div class="kpi-card">
           <div class="kpi-label">Budget Révisé Total</div>
           <div class="kpi-value" id="kpiBudgetRev">—</div>
+          <div class="kpi-unit">CHF</div>
+        </div>
+        <div class="kpi-card">
+          <div class="kpi-label">AT Total</div>
+          <div class="kpi-value" id="kpiAT">—</div>
           <div class="kpi-unit">CHF</div>
         </div>
         <div class="kpi-card">
@@ -75,20 +81,20 @@
           <div class="kpi-unit">CHF</div>
         </div>
         <div class="kpi-card">
-          <div class="kpi-label">Écart</div>
+          <div class="kpi-label">Écart Réel / AT</div>
           <div class="kpi-value" id="kpiEcart">—</div>
           <div class="kpi-unit">CHF</div>
         </div>
         <div class="kpi-card">
-          <div class="kpi-label">% Avancement</div>
+          <div class="kpi-label">% Avancement / AT</div>
           <div class="kpi-value" id="kpiAvancement">—</div>
           <div class="kpi-unit">%</div>
         </div>
       </div>
 
       <div class="card">
-        <h2>📈 Courbes S & Coûts Cumulés</h2>
-        <p class="hint">💡 Cliquez sur la légende pour masquer/afficher des séries</p>
+        <h2>📈 Courbes S &amp; Coûts Cumulés</h2>
+        <p class="hint">💡 Chaque type de budget (Budget, Budget Révisé, AT) utilise ses propres dates de début/fin</p>
         <div class="chart-wrapper">
           <canvas id="chart"></canvas>
         </div>
@@ -110,57 +116,38 @@
       </div>
 
       <div class="card">
-        <h2>📊 Avancement par ID Projet</h2>
-        <p class="hint">💡 Comparaison Réel / Budget Révisé</p>
+        <h2>📊 Budget Révisé / AT / Réel par Tâche</h2>
+        <p class="hint">💡 Comparaison Budget Révisé, AT et Coûts Réels par Nom de la Tâche</p>
+        <div class="chart-wrapper-large">
+          <canvas id="chartBarTache"></canvas>
+        </div>
+      </div>
+
+      <div class="card">
+        <h2>📊 Avancement par Projet</h2>
+        <p class="hint">💡 Comparaison Réel / Budget Révisé / AT par projet</p>
         <div class="chart-wrapper">
           <canvas id="chartBar"></canvas>
         </div>
       </div>
 
       <div class="card" id="tablePrevCard">
-        <h2>📋 Budget Révisé - Détails Mensuels</h2>
+        <h2>📋 Budget Révisé — Détails Mensuels</h2>
         <div class="table-wrapper">
-          <table class="table" id="tablePreview">
-            <thead>
-              <tr>
-                <th>Mois</th>
-                <th>Montant (S)</th>
-                <th>Cumul (S)</th>
-                <th>Réel par mois</th>
-                <th>Réel cumulé</th>
-                <th>Écart</th>
-              </tr>
-            </thead>
-            <tbody></tbody>
-          </table>
+          <table class="table" id="tablePreview"></table>
         </div>
       </div>
 
       <div class="card" id="tableCmpCard">
-        <h2>🔍 Comparatif par ID Projet</h2>
+        <h2>🔍 Comparatif par Projet</h2>
         <div class="table-wrapper">
-          <table class="table" id="tableCompare">
-            <thead>
-              <tr>
-                <th>ID Projet</th>
-                <th>Budget</th>
-                <th>Budget Révisé</th>
-                <th>AT</th>
-                <th>Réel</th>
-                <th>Écart Rev</th>
-                <th>Écart AT</th>
-                <th>% Rev</th>
-              </tr>
-            </thead>
-            <tbody></tbody>
-            <tfoot></tfoot>
-          </table>
+          <table class="table" id="tableCompare"></table>
         </div>
       </div>
-    </div>
 
-    <!-- ONGLET 2: IMPUTATIONS -->
-    <div id="tab2" class="tab-content">
+      <!-- ===== PARTIE 2: IMPUTATIONS ===== -->
+      <div class="section-title"><h2>💼 PARTIE 2 — Imputations SIA 5</h2></div>
+
       <div id="kpiSectionHonoraires" class="kpi-section" style="display:none;">
         <div class="kpi-card">
           <div class="kpi-label">Honoraires Budget Révisé</div>
@@ -178,79 +165,58 @@
           <div class="kpi-unit">CHF</div>
         </div>
         <div class="kpi-card">
-          <div class="kpi-label">Reste à imputer</div>
+          <div class="kpi-label">Reste à imputer (AT)</div>
           <div class="kpi-value" id="kpiHonoReste">—</div>
           <div class="kpi-unit">CHF</div>
         </div>
       </div>
 
       <div class="card">
-        <h2>📊 Honoraires par Métier</h2>
+        <h2>📊 Honoraires par Type (Budget Révisé / AT / Réel)</h2>
         <div class="chart-wrapper">
           <canvas id="chartHonoMetier"></canvas>
         </div>
       </div>
 
       <div class="card">
-        <h2>👥 Détails par Ressource (Réel uniquement)</h2>
+        <h2>👥 Coûts Réels par Ressource &amp; Type d'Honoraires</h2>
+        <p class="hint">💡 Somme des coûts réels groupée par Ressource et Type d'honoraires (Nom de la Tâche)</p>
         <div class="table-wrapper">
-          <table class="table" id="tableRessources">
-            <thead>
-              <tr>
-                <th>Ressource</th>
-                <th>Métier</th>
-                <th>Projet</th>
-                <th>Montant Réel</th>
-              </tr>
-            </thead>
-            <tbody></tbody>
-          </table>
+          <table class="table" id="tableRessources"></table>
         </div>
       </div>
 
       <div class="card">
-        <h2>🔍 Synthèse par Métier (Réel)</h2>
+        <h2>🔍 Synthèse par Type d'Honoraires (Réel)</h2>
         <div class="chart-wrapper">
           <canvas id="chartSyntheseMetier"></canvas>
         </div>
       </div>
-    </div>
 
-    <!-- ONGLET 3: PLANNING -->
-    <div id="tab3" class="tab-content">
+      <!-- ===== PARTIE 3: PLANNING ===== -->
+      <div class="section-title"><h2>📅 PARTIE 3 — Planning SIA 5</h2></div>
+
       <div class="card">
-        <h2>📅 Planning Projet - Gantt</h2>
-        <p class="hint">💡 Les dates réelles sont calculées automatiquement depuis les imputations</p>
+        <h2>📅 Planning Projet — Gantt</h2>
+        <p class="hint">💡 Les dates réelles sont calculées depuis les imputations. Vous pouvez les ajuster manuellement dans le tableau ci-dessous.</p>
         <div class="chart-wrapper-large">
           <canvas id="chartGantt"></canvas>
         </div>
-        <button id="btnExportGanttPNG" class="btn-primary">📸 Export Gantt (PNG)</button>
+        <button id="btnExportGanttPNG" class="btn-primary" style="margin-top:12px;">📸 Export Gantt (PNG)</button>
       </div>
 
       <div class="card">
         <h2>📋 Tableau Consolidé Planning</h2>
+        <p class="hint">💡 Les champs <strong>Réel Début</strong> et <strong>Réel Fin</strong> sont pré-remplis depuis les imputations. Modifiez-les manuellement si besoin, puis cliquez sur <strong>Recalculer</strong>.</p>
         <div class="table-wrapper">
-          <table class="table" id="tablePlanning">
-            <thead>
-              <tr>
-                <th>Projet</th>
-                <th>Début BR</th>
-                <th>Fin BR</th>
-                <th>Début AT</th>
-                <th>Fin AT</th>
-                <th>Début Réel</th>
-                <th>Fin Réel</th>
-                <th>Écart (jours)</th>
-                <th>Statut</th>
-              </tr>
-            </thead>
-            <tbody></tbody>
-          </table>
+          <table class="table" id="tablePlanning"></table>
         </div>
+        <button id="btnApplyPlanning" class="btn-secondary" style="margin-top:12px;">🔄 Recalculer Gantt avec dates modifiées</button>
       </div>
-    </div>
 
-  </div>
+    </div><!-- fin tabSIA5 -->
+
+  </div><!-- fin container -->
 
   <script src="script.js"></script>
 </body>
