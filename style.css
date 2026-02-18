@@ -1,7 +1,9 @@
 /* ============================================================
    Dashboard CAD — Groupe E Celsius
-   style.css v5.0 — 18/02/2026
-   Multi-phase SIA 2/3/4/5
+   style.css v5.3 — 18/02/2026
+   Corrections v5.3 :
+   - Grille 2x2 pour zone de contrôles
+   - Affichage file-status (nom fichier + indicateur chargé)
    ============================================================ */
 
 :root {
@@ -352,12 +354,12 @@ body {
 }
 
 /* ============================================================
-   UPLOAD ZONE
+   UPLOAD ZONE (CORRECTION v5.3 : grille 2x2)
    ============================================================ */
 .upload-zone {
   display: grid;
-  grid-template-columns: 1fr 1fr 1fr;
-  gap: 16px;
+  grid-template-columns: 1fr 1fr;
+  gap: 20px;
   margin-bottom: 0;
 }
 
@@ -386,6 +388,35 @@ body {
   font-size: 11px;
   color: var(--muted);
   margin-top: 2px;
+}
+
+/* ============================================================
+   CONTROLS INNER (CORRECTION v5.3 : grille 2x2)
+   ============================================================ */
+.controls-inner {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 12px 24px;
+  align-items: start;
+}
+
+/* ============================================================
+   FILE STATUS (CORRECTION v5.3)
+   ============================================================ */
+.file-status {
+  font-size: 11px;
+  color: var(--muted);
+  margin-top: 3px;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  max-width: 250px;
+  display: block;
+}
+
+.file-status.loaded {
+  color: var(--success);
+  font-weight: 600;
 }
 
 /* ============================================================
@@ -839,7 +870,11 @@ input.date-input:focus {
 
 @media (max-width: 900px) {
   .upload-zone {
-    grid-template-columns: 1fr 1fr;
+    grid-template-columns: 1fr;
+  }
+  
+  .controls-inner {
+    grid-template-columns: 1fr;
   }
 }
 
