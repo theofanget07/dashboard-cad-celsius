@@ -1,9 +1,7 @@
 /* ============================================================
    Dashboard CAD — Groupe E Celsius
-   script.js  v4.1  — 18/02/2026
-   Fix: Gantt axe Y catégorique (labels réels),
-        camembert palette classique sobre,
-        PDF landscape A4 optimisé (2 colonnes, pages pleines)
+   script.js  v4.2  — 18/02/2026
+   Fix Gantt: y=yLabels[idx] au lieu de y=idx pour axe category
    ============================================================ */
 
 // ---- Globals ----
@@ -43,19 +41,12 @@ const GE_BLUE  = '#163a5f';
 const GE_BLUE2 = '#1e4d8c';
 const GE_BLUE3 = '#2e6db4';
 const GE_BLUE4 = '#5b9bd5';
-const GE_ORANGE = '#e8873a';   // orange brique sobre
-const GE_RED    = '#c0392b';   // rouge sombre
-const GE_GREEN  = '#27ae60';   // vert mat
+const GE_ORANGE = '#e8873a';
+const GE_RED    = '#c0392b';
+const GE_GREEN  = '#27ae60';
 
-// Camembert — palette classique sobre, bien contrastée
-const PIE_COLORS = [
-  '#2e6db4',   // bleu moyen
-  '#e8873a',   // orange brique
-  '#27ae60',   // vert
-  '#8e44ad',   // violet
-  '#c0392b',   // rouge
-  '#16a085'    // teal sombre
-];
+// Camembert — palette classique sobre
+const PIE_COLORS = ['#2e6db4','#e8873a','#27ae60','#8e44ad','#c0392b','#16a085'];
 
 // ============================================================
 // UTILS
@@ -75,9 +66,7 @@ function toNum(v) {
   if (typeof v !== 'string') return 0;
   return parseFloat(v.replace(/[\u00A0\u202F']/g, '').replace(/[ ]/g, '').replace(',', '.')) || 0;
 }
-function toCHF(n) {
-  return (n || 0).toLocaleString('fr-CH', { minimumFractionDigits: 0 });
-}
+function toCHF(n) { return (n || 0).toLocaleString('fr-CH', { minimumFractionDigits: 0 }); }
 function toDate(v) {
   if (v instanceof Date && !isNaN(v)) return v;
   if (typeof v === 'number') return new Date(Date.UTC(1899, 11, 30) + v * 86400000);
@@ -119,8 +108,7 @@ function modelRange(rows, modelName, axis) {
   let sIdx = axis.indexOf(mmMin), eIdx = axis.indexOf(mmMax);
   if (sIdx < 0) sIdx = axis.findIndex(m => m >= mmMin);
   if (eIdx < 0) { for (let i = axis.length-1; i >= 0; i--) { if (axis[i] <= mmMax) { eIdx = i; break; } } }
-  if (sIdx < 0) sIdx = 0;
-  if (eIdx < 0) eIdx = axis.length-1;
+  if (sIdx < 0) sIdx = 0; if (eIdx < 0) eIdx = axis.length-1;
   return [sIdx, eIdx];
 }
 
@@ -131,7 +119,7 @@ const todayLinePlugin = {
     if (!opts || !opts.label) return;
     const { ctx, chartArea: { top, bottom }, scales: { x } } = ch;
     const labels = ch.data.labels;
-    const toT    = s => { const [y,m] = s.split('-'); return new Date(+y,+m-1,1).getTime(); };
+    const toT = s => { const [y,m] = s.split('-'); return new Date(+y,+m-1,1).getTime(); };
     const t = toT(opts.label);
     let bi = 0, bd = Infinity;
     labels.forEach((l,i) => { const d = Math.abs(toT(l)-t); if (d < bd) { bd=d; bi=i; } });
@@ -170,11 +158,7 @@ document.getElementById('btnApplyPlanning').addEventListener('click', () => {
 document.getElementById('btnPDF').addEventListener('click', generatePDF);
 
 function maybeProcess() {
-  if (prevRows.length && realRows.length) {
-    statusEl.textContent = '\u2705 Fichiers chargés — calcul en cours...';
-    statusEl.className   = 'status';
-    processAll();
-  }
+  if (prevRows.length && realRows.length) { statusEl.textContent = '✅ Fichiers chargés — calcul en cours...'; statusEl.className = 'status'; processAll(); }
 }
 function processAll() { processBudgets(); processImputations(); processPlanning(); }
 
@@ -198,7 +182,7 @@ function processBudgets() {
   const allDates  = [];
   MODELS.forEach(mn => { if(model[mn].start) allDates.push(model[mn].start); if(model[mn].end) allDates.push(model[mn].end); });
   realDates.forEach(d => allDates.push(d));
-  if (!allDates.length) { statusEl.textContent = '\u26a0\ufe0f Aucune date trouvée.'; return; }
+  if (!allDates.length) { statusEl.textContent = '⚠️ Aucune date trouvée.'; return; }
 
   const globalMin = new Date(Math.min(...allDates)), globalMax = new Date(Math.max(...allDates));
   const modelMin  = new Date(Math.min(...MODELS.filter(m=>model[m].start).map(m=>model[m].start)));
@@ -221,14 +205,11 @@ function processBudgets() {
   });
 
   const realMonth = axis.map(m => realMap.get(m)||0);
-  let acc = initCum;
-  const realCum = realMonth.map(v => { acc+=v; return acc; });
+  let acc = initCum; const realCum = realMonth.map(v => { acc+=v; return acc; });
   const realCut = realCum.map((v,i) => axis[i] > mmToday ? null : v);
 
-  const totalBR = model['Budget_Rev'].total, totalAT = model['AT'].total;
-  const totalR  = realCum[realCum.length-1]||0;
-  const ecart   = totalR-totalAT;
-  const pct     = totalAT > 0 ? (totalR/totalAT*100).toFixed(1) : 0;
+  const totalBR = model['Budget_Rev'].total, totalAT = model['AT'].total, totalR = realCum[realCum.length-1]||0;
+  const ecart = totalR-totalAT, pct = totalAT > 0 ? (totalR/totalAT*100).toFixed(1) : 0;
   kpiSection.style.display = 'grid';
   kpiSection.innerHTML = `
     <div class="kpi-card"><div class="kpi-label">Budget Révisé Total</div><div class="kpi-value">${toCHF(totalBR)}</div><div class="kpi-unit">CHF</div></div>
@@ -238,13 +219,9 @@ function processBudgets() {
     <div class="kpi-card"><div class="kpi-label">% Avanc. / AT</div><div class="kpi-value ${pct>100?'negative':'positive'}">${pct}%</div><div class="kpi-unit"></div></div>
   `;
 
-  drawCourbesS(axis, series, realCut, today);
-  buildTablePreview(axis, series['Budget_Rev'], realMonth, initCum);
-  drawBarChart();
-  drawPieCharts();
-  buildTableCompare();
-  statusEl.textContent = '\u2705 Calcul terminé avec succès';
-  statusEl.className   = 'status success';
+  drawCourbesS(axis, series, realCut, today); buildTablePreview(axis, series['Budget_Rev'], realMonth, initCum);
+  drawBarChart(); drawPieCharts(); buildTableCompare();
+  statusEl.textContent = '✅ Calcul terminé avec succès'; statusEl.className = 'status success';
 }
 
 function drawCourbesS(axis, series, realCut, today) {
@@ -273,8 +250,7 @@ function drawCourbesS(axis, series, realCut, today) {
 
 function buildTablePreview(axis, brCum, realMonth, initCum) {
   tablePrev.innerHTML = `<thead><tr><th>Mois</th><th>Montant BR (S)</th><th>Cumul BR (S)</th><th>Réel / mois</th><th>Réel cumulé</th><th>Écart</th></tr></thead><tbody></tbody>`;
-  const tbody = tablePrev.querySelector('tbody');
-  let cumBR = 0, cumR = initCum;
+  const tbody = tablePrev.querySelector('tbody'); let cumBR = 0, cumR = initCum;
   axis.forEach((m,i) => {
     const brVal = brCum[i], rVal = realMonth[i]||0;
     if (brVal !== null) cumBR = brVal;
@@ -317,16 +293,11 @@ function drawPieCharts() {
   const pieCfg = (labels, data) => ({
     type: 'pie',
     data: { labels, datasets: [{ data, backgroundColor: PIE_COLORS, borderWidth: 2, borderColor: '#ffffff' }] },
-    options: {
-      responsive: true, maintainAspectRatio: false,
-      plugins: {
-        legend: { position: 'right', labels: { font:{size:12}, padding:14, usePointStyle:true, boxWidth:12 } },
-        tooltip: { callbacks: { label: ctx => `${ctx.label}: ${toCHF(ctx.parsed)} CHF (${((ctx.parsed/total(data))*100).toFixed(1)}%)` } }
-      }
-    }
+    options: { responsive: true, maintainAspectRatio: false,
+      plugins: { legend: { position: 'right', labels: { font:{size:12}, padding:14, usePointStyle:true, boxWidth:12 } },
+        tooltip: { callbacks: { label: ctx => `${ctx.label}: ${toCHF(ctx.parsed)} CHF (${((ctx.parsed/total(data))*100).toFixed(1)}%)` } } } }
   });
-  if(chartPieBudgetRev) chartPieBudgetRev.destroy();
-  if(chartPieAT)        chartPieAT.destroy();
+  if(chartPieBudgetRev) chartPieBudgetRev.destroy(); if(chartPieAT) chartPieAT.destroy();
   chartPieBudgetRev = new Chart(document.getElementById('chartPieBudgetRev').getContext('2d'), pieCfg(labelsBR, dataBR));
   chartPieAT        = new Chart(document.getElementById('chartPieAT').getContext('2d'),        pieCfg(labelsAT, dataAT));
 }
@@ -341,16 +312,13 @@ function drawBarChart() {
   });
   if(chartBar) chartBar.destroy();
   chartBar = new Chart(document.getElementById('chartBar').getContext('2d'), {
-    type:'bar',
-    data:{ labels, datasets:[
+    type:'bar', data:{ labels, datasets:[
       {label:'Budget Révisé', data:dBR, backgroundColor:GE_ORANGE},
       {label:'AT',             data:dAT, backgroundColor:GE_BLUE2},
-      {label:'Réel',           data:dR,  backgroundColor:GE_RED}
-    ]},
+      {label:'Réel',           data:dR,  backgroundColor:GE_RED} ]},
     options:{ indexAxis:'y', responsive:true, maintainAspectRatio:false,
       plugins:{ legend:{position:'top'}, tooltip:{callbacks:{label:ctx=>`${ctx.dataset.label}: ${toCHF(ctx.parsed.x)} CHF`}} },
-      scales:{ x:{ticks:{callback:v=>toCHF(v)}} }
-    }
+      scales:{ x:{ticks:{callback:v=>toCHF(v)}} } }
   });
 }
 
@@ -362,14 +330,12 @@ function extractTypeHono(nomTache) {
   return nomTache.replace(/_(?:Réseau CAD|Sous-stations|Général|Centrale|Bâtiment|Participations|SIA).*$/, '').trim() || nomTache;
 }
 function isExternal(r) {
-  const tache = (r['Nom de la tâche'] || '').toLowerCase();
-  const fourn = r['Nom du Fournisseur'] || '';
+  const tache = (r['Nom de la tâche'] || '').toLowerCase(), fourn = r['Nom du Fournisseur'] || '';
   return tache.includes('externe') || fourn.trim() !== '';
 }
 
 function processImputations() {
   const isHono = r => r['Nom de la tâche'] && r['Nom de la tâche'].toLowerCase().includes('honoraires');
-
   const honoBR = prevRows.filter(r=>isHono(r)&&r['Modèle de prévision']==='Budget_Rev').reduce((a,r)=>a+toNum(r['Montant total du coût']),0);
   const honoAT = prevRows.filter(r=>isHono(r)&&r['Modèle de prévision']==='AT').reduce((a,r)=>a+toNum(r['Montant total du coût']),0);
   const honoR  = realRows.filter(isHono).reduce((a,r)=>a+toNum(r['Montant total du coût']),0);
@@ -381,7 +347,6 @@ function processImputations() {
     <div class="kpi-card"><div class="kpi-label">Honoraires Réels</div><div class="kpi-value">${toCHF(honoR)}</div><div class="kpi-unit">CHF</div></div>
     <div class="kpi-card"><div class="kpi-label">Reste à imputer (AT)</div><div class="kpi-value ${reste>=0?'positive':'negative'}">${toCHF(reste)}</div><div class="kpi-unit">CHF</div></div>
   `;
-
   const typesBR={}, typesAT={}, typesR={};
   prevRows.forEach(r => {
     if(!isHono(r)) return;
@@ -389,48 +354,34 @@ function processImputations() {
     if(r['Modèle de prévision']==='Budget_Rev') typesBR[t]=(typesBR[t]||0)+v;
     if(r['Modèle de prévision']==='AT')         typesAT[t]=(typesAT[t]||0)+v;
   });
-  realRows.forEach(r => {
-    if(!isHono(r)) return;
-    const t=extractTypeHono(r['Nom de la tâche']);
-    typesR[t]=(typesR[t]||0)+toNum(r['Montant total du coût']);
-  });
+  realRows.forEach(r => { if(!isHono(r)) return; const t=extractTypeHono(r['Nom de la tâche']); typesR[t]=(typesR[t]||0)+toNum(r['Montant total du coût']); });
   const allTypes = [...new Set([...Object.keys(typesBR),...Object.keys(typesAT),...Object.keys(typesR)])];
   if(chartHonoMetier) chartHonoMetier.destroy();
   chartHonoMetier = new Chart(document.getElementById('chartHonoMetier').getContext('2d'), {
-    type:'bar',
-    data:{ labels:allTypes, datasets:[
+    type:'bar', data:{ labels:allTypes, datasets:[
       {label:'Budget Révisé', data:allTypes.map(t=>typesBR[t]||0), backgroundColor:GE_ORANGE},
       {label:'AT',             data:allTypes.map(t=>typesAT[t]||0), backgroundColor:GE_BLUE2},
-      {label:'Réel',           data:allTypes.map(t=>typesR[t]||0),  backgroundColor:GE_RED}
-    ]},
+      {label:'Réel',           data:allTypes.map(t=>typesR[t]||0),  backgroundColor:GE_RED} ]},
     options:{ indexAxis:'y', responsive:true, maintainAspectRatio:false,
       plugins:{legend:{position:'top'}, tooltip:{callbacks:{label:ctx=>`${ctx.dataset.label}: ${toCHF(ctx.parsed.x)} CHF`}}},
-      scales:{x:{ticks:{callback:v=>toCHF(v)}}}
-    }
+      scales:{x:{ticks:{callback:v=>toCHF(v)}}} }
   });
-
-  // Tableau ressources
   const buildMap = rows => {
     const m = {};
     rows.forEach(r => {
       if(!isHono(r)) return;
       const ress = r['Ressource.Nom de la ressource'] || (r['Nom du Fournisseur']?`Fourn.: ${r['Nom du Fournisseur']}`:'Non spécifié');
-      const type = extractTypeHono(r['Nom de la tâche']||'');
-      const proj = getPN(r['ID Projet']||'');
-      const ext  = isExternal(r);
+      const type = extractTypeHono(r['Nom de la tâche']||''), proj = getPN(r['ID Projet']||''), ext = isExternal(r);
       const key  = `${ext?'EXT':'INT'}||${ress}||${type}||${proj}`;
       if(!m[key]) m[key]={ress,type,proj,ext,total:0};
       m[key].total += toNum(r['Montant total du coût']);
     });
     return Object.values(m).filter(r=>r.total!==0).sort((a,b)=>b.total-a.total);
   };
-  const allRows = buildMap(realRows);
-  const extRows = allRows.filter(r=>r.ext), intRows = allRows.filter(r=>!r.ext);
-  const totExt  = extRows.reduce((a,r)=>a+r.total,0), totInt = intRows.reduce((a,r)=>a+r.total,0);
-  const totAll  = totExt+totInt;
+  const allRows = buildMap(realRows), extRows = allRows.filter(r=>r.ext), intRows = allRows.filter(r=>!r.ext);
+  const totExt = extRows.reduce((a,r)=>a+r.total,0), totInt = intRows.reduce((a,r)=>a+r.total,0), totAll = totExt+totInt;
   const makeRow = (r,cls='') => `<tr class="${cls}"><td>${r.ress}</td><td>${r.type}</td><td>${r.proj}</td><td class="${r.total<0?'negative':''}">${toCHF(r.total)}</td></tr>`;
   const sepRow  = (label,val,cls) => `<tr class="${cls}"><td colspan="3"><strong>${label}</strong></td><td><strong>${toCHF(val)}</strong></td></tr>`;
-
   tableRess.innerHTML = `<thead><tr><th>Ressource</th><th>Type d'Honoraires</th><th>Projet</th><th>Total Réel (CHF)</th></tr></thead><tbody></tbody><tfoot></tfoot>`;
   const tb=tableRess.querySelector('tbody'), tf=tableRess.querySelector('tfoot');
   tb.insertAdjacentHTML('beforeend',`<tr class="section-header-int"><td colspan="4">🔵 Honoraires Internes</td></tr>`);
@@ -461,8 +412,7 @@ function processPlanning() {
     }
     plan[id]={name:getPN(id),brS:br.s,brE:br.e,atS:at.s,atE:at.e,rS,rE};
   });
-  buildTablePlanning(plan);
-  drawGantt(plan);
+  buildTablePlanning(plan); drawGantt(plan);
 }
 
 function buildTablePlanning(plan) {
@@ -473,150 +423,83 @@ function buildTablePlanning(plan) {
   PROJECT_ORDER.forEach(id=>{
     const p=plan[id], ecart=p.atE&&p.rE?Math.round((p.rE-p.atE)/86400000):null;
     let stat='prevu',sLab='Prévu';
-    if(p.rS&&!p.rE){stat='en-cours';sLab='En cours';}
-    else if(p.rE){stat=ecart>0?'retard':'termine';sLab=ecart>0?'Retard':'Terminé';}
-    tb.insertAdjacentHTML('beforeend',`
-      <tr>
-        <td><strong>${p.name}</strong></td>
-        <td>${disp(p.brS)}</td><td>${disp(p.brE)}</td>
-        <td>${disp(p.atS)}</td><td>${disp(p.atE)}</td>
-        <td><input type="date" id="rs_${id}" class="date-input" value="${fmt(p.rS)}"/></td>
-        <td><input type="date" id="re_${id}" class="date-input" value="${fmt(p.rE)}"/></td>
-        <td>${ecart!==null?ecart:'—'}</td>
-        <td><span class="badge ${stat}">${sLab}</span></td>
-      </tr>`);
+    if(p.rS&&!p.rE){stat='en-cours';sLab='En cours';} else if(p.rE){stat=ecart>0?'retard':'termine';sLab=ecart>0?'Retard':'Terminé';}
+    tb.insertAdjacentHTML('beforeend',`<tr><td><strong>${p.name}</strong></td><td>${disp(p.brS)}</td><td>${disp(p.brE)}</td><td>${disp(p.atS)}</td><td>${disp(p.atE)}</td><td><input type="date" id="rs_${id}" class="date-input" value="${fmt(p.rS)}"/></td><td><input type="date" id="re_${id}" class="date-input" value="${fmt(p.rE)}"/></td><td>${ecart!==null?ecart:'—'}</td><td><span class="badge ${stat}">${sLab}</span></td></tr>`);
   });
 }
 
 // ============================================================
-// GANTT  v4.1  —  Fix: axe Y catégorique avec labels réels
+// GANTT  v4.2  —  FIX: y = yLabels[idx] (string catégorique)
 // ============================================================
 function drawGantt(plan) {
   const allD = [];
-  PROJECT_ORDER.forEach(id => {
-    const p=plan[id];
-    [p.brS,p.brE,p.atS,p.atE,p.rS,p.rE].forEach(d=>{if(d&&!isNaN(d))allD.push(d);});
-  });
+  PROJECT_ORDER.forEach(id => { const p=plan[id]; [p.brS,p.brE,p.atS,p.atE,p.rS,p.rE].forEach(d=>{if(d&&!isNaN(d))allD.push(d);}); });
   if(!allD.length) return;
 
-  const minD = new Date(Math.min(...allD));
-  const maxD = new Date(Math.max(...allD));
-  const span = Math.round((maxD-minD)/86400000)+30; // +30j de marge
+  const minD = new Date(Math.min(...allD)), maxD = new Date(Math.max(...allD));
+  const span = Math.round((maxD-minD)/86400000)+30;
   const toDay = d => d&&!isNaN(d) ? Math.round((d-minD)/86400000) : null;
 
-  // ---- Construction des labels Y (axe catégorique) ----
-  // Chaque entrée = une ligne. On définit un tableau de labels ET un dataset
-  // dont le point y est l'INDEX dans ce tableau.
+  // Labels Y catégoriques
   const yLabels = [];
-  const ySepIdx = new Set(); // indices où tirer un trait de séparation
-
   PROJECT_ORDER.forEach((id, projIdx) => {
-    if(projIdx > 0) ySepIdx.add(yLabels.length);
     const n = getPN(id);
-    yLabels.push(`${n}  \u25ba BR`);
-    yLabels.push(`${n}  \u25cf AT`);
-    yLabels.push(`${n}  \u25a0 Réel`);
+    yLabels.push(`${n}  ▶ BR`);
+    yLabels.push(`${n}  ● AT`);
+    yLabels.push(`${n}  ■ Réel`);
   });
 
-  const nRows = yLabels.length; // = PROJECT_ORDER.length * 3
-
-  // ---- Datasets ----
+  // Datasets : y doit être le LABEL (string) pas l'index
   const datasets = [];
-  const pushBar = (label, s, e, color, yIdx) => {
+  const pushBar = (label, s, e, color, yLabel) => {
     if(!s||!e||isNaN(s)||isNaN(e)) return;
     datasets.push({
-      label,
-      data: [{ x: [toDay(s), toDay(e)], y: yIdx }],
-      backgroundColor: color+'cc',  // légère transparence
-      borderColor: color,
-      borderWidth: 1.5,
-      borderSkipped: false,
-      borderRadius: 4
+      label, data: [{ x: [toDay(s), toDay(e)], y: yLabel }],
+      backgroundColor: color+'dd', borderColor: color, borderWidth: 2, borderSkipped: false, borderRadius: 4
     });
   };
 
   PROJECT_ORDER.forEach((id, idx) => {
     const p = plan[id], base = idx*3;
-    pushBar(`${p.name} — Budget Révisé`, p.brS, p.brE, GE_ORANGE, base);
-    pushBar(`${p.name} — AT`,              p.atS, p.atE, GE_BLUE2,  base+1);
-    pushBar(`${p.name} — Réel`,            p.rS,  p.rE,  GE_RED,    base+2);
+    pushBar(`${p.name} — Budget Révisé`, p.brS, p.brE, GE_ORANGE, yLabels[base]);
+    pushBar(`${p.name} — AT`,              p.atS, p.atE, GE_BLUE2,  yLabels[base+1]);
+    pushBar(`${p.name} — Réel`,            p.rS,  p.rE,  GE_RED,    yLabels[base+2]);
   });
 
-  if(datasets.length === 0) return; // rien à afficher
-
-  // ---- Tick step (dates lisibles) ----
+  if(datasets.length === 0) return;
   const tickStep = Math.max(30, Math.round(span/12));
-
   if(chartGantt) chartGantt.destroy();
 
   chartGantt = new Chart(document.getElementById('chartGantt').getContext('2d'), {
     type: 'bar',
     data: { labels: yLabels, datasets },
     options: {
-      indexAxis: 'y',
-      responsive: true,
-      maintainAspectRatio: false,
+      indexAxis: 'y', responsive: true, maintainAspectRatio: false,
       plugins: {
         legend: { display: false },
-        tooltip: {
-          callbacks: {
-            title: ctx => ctx[0].dataset.label,
-            label: ctx => {
-              const [d0,d1] = ctx.parsed.x;
-              const sD = new Date(minD.getTime()+d0*86400000);
-              const eD = new Date(minD.getTime()+d1*86400000);
-              const dur = Math.round((eD-sD)/86400000);
-              return [
-                `Début : ${sD.toLocaleDateString('fr-CH')}`,
-                `Fin   : ${eD.toLocaleDateString('fr-CH')}`,
-                `Durée : ${dur} jours`
-              ];
-            }
+        tooltip: { callbacks: {
+          title: ctx => ctx[0].dataset.label,
+          label: ctx => {
+            const [d0,d1] = ctx.parsed.x;
+            const sD = new Date(minD.getTime()+d0*86400000), eD = new Date(minD.getTime()+d1*86400000);
+            const dur = Math.round((eD-sD)/86400000);
+            return [`Début : ${sD.toLocaleDateString('fr-CH')}`,`Fin   : ${eD.toLocaleDateString('fr-CH')}`,`Durée : ${dur} jours`];
           }
-        }
+        }}
       },
       scales: {
-        x: {
-          type: 'linear',
-          min: 0,
-          max: span,
-          title: { display: true, text: 'Timeline' },
-          grid: { color: 'rgba(0,0,0,0.06)' },
-          ticks: {
-            stepSize: tickStep,
-            callback: value => {
-              const d = new Date(minD.getTime()+value*86400000);
-              return d.toLocaleDateString('fr-CH',{month:'short',year:'2-digit'});
-            }
-          }
+        x: { type: 'linear', min: 0, max: span, title: { display: true, text: 'Timeline' }, grid: { color: 'rgba(0,0,0,0.06)' },
+          ticks: { stepSize: tickStep, callback: value => { const d = new Date(minD.getTime()+value*86400000); return d.toLocaleDateString('fr-CH',{month:'short',year:'2-digit'}); } }
         },
-        y: {
-          // Axe catégorique : Chart.js mappe labels[0..n-1] automatiquement
-          type: 'category',
-          labels: yLabels,
-          offset: true,
-          grid: {
-            color: ctx => {
-              // Séparateur de projet (entre les groupes BR/AT/Réel)
-              const idx = ctx.index;
-              return (idx>0 && idx%3===0) ? 'rgba(22,58,95,0.25)' : 'rgba(0,0,0,0.04)';
-            },
-            lineWidth: ctx => (ctx.index>0 && ctx.index%3===0) ? 2 : 1
-          },
+        y: { type: 'category', labels: yLabels, offset: true,
+          grid: { color: ctx => { const idx = ctx.index; return (idx>0 && idx%3===0) ? 'rgba(22,58,95,0.25)' : 'rgba(0,0,0,0.04)'; }, lineWidth: ctx => (ctx.index>0 && ctx.index%3===0) ? 2 : 1 },
           ticks: {
-            font: ctx => {
-              const i = yLabels.indexOf(ctx.tick.label);
-              return (i>=0 && i%3===0) ? {weight:'bold',size:11} : {size:10};
-            },
-            color: ctx => {
-              const i = yLabels.indexOf(ctx.tick.label);
-              return (i>=0 && i%3===0) ? '#163a5f' : '#5a7a9a';
-            }
+            font: ctx => { const i = yLabels.indexOf(ctx.tick.label); return (i>=0 && i%3===0) ? {weight:'bold',size:11} : {size:10}; },
+            color: ctx => { const i = yLabels.indexOf(ctx.tick.label); return (i>=0 && i%3===0) ? '#163a5f' : '#5a7a9a'; }
           }
         }
       },
-      barPercentage: 0.55,
-      categoryPercentage: 0.85
+      barPercentage: 0.6, categoryPercentage: 0.9
     }
   });
 }
@@ -625,227 +508,114 @@ function drawGantt(plan) {
 // EXPORTS
 // ============================================================
 function exportChartPNG(canvasId, filename) {
-  const canvas = document.getElementById(canvasId);
-  if(!canvas) return;
-  const a = document.createElement('a');
-  a.download = filename+'.png'; a.href = canvas.toDataURL('image/png',1); a.click();
+  const canvas = document.getElementById(canvasId); if(!canvas) return;
+  const a = document.createElement('a'); a.download = filename+'.png'; a.href = canvas.toDataURL('image/png',1); a.click();
 }
 window.exportChartPNG = exportChartPNG;
 
 async function exportTablePNG(cardId, filename) {
-  const el = document.getElementById(cardId);
-  if(!el) return;
+  const el = document.getElementById(cardId); if(!el) return;
   const canvas = await html2canvas(el,{scale:2,backgroundColor:'#ffffff',logging:false});
-  canvas.toBlob(blob=>{
-    const url=URL.createObjectURL(blob);
-    const a=document.createElement('a'); a.download=filename+'.png'; a.href=url; a.click();
-    URL.revokeObjectURL(url);
-  });
+  canvas.toBlob(blob=>{ const url=URL.createObjectURL(blob); const a=document.createElement('a'); a.download=filename+'.png'; a.href=url; a.click(); URL.revokeObjectURL(url); });
 }
 window.exportTablePNG = exportTablePNG;
 
 function exportTableXLSX(tableId, sheetName) {
-  const el = document.getElementById(tableId);
-  if(!el) return;
-  const wb = XLSX.utils.book_new();
-  XLSX.utils.book_append_sheet(wb, XLSX.utils.table_to_sheet(el), sheetName.substring(0,31));
-  XLSX.writeFile(wb, sheetName+'.xlsx');
+  const el = document.getElementById(tableId); if(!el) return;
+  const wb = XLSX.utils.book_new(); XLSX.utils.book_append_sheet(wb, XLSX.utils.table_to_sheet(el), sheetName.substring(0,31)); XLSX.writeFile(wb, sheetName+'.xlsx');
 }
 window.exportTableXLSX = exportTableXLSX;
 
 // ============================================================
-// PDF  v4.1  —  Landscape A4, 2 sections par page, design soigné
+// PDF  v4.2
 // ============================================================
 async function generatePDF() {
   const { jsPDF } = window.jspdf;
-  const today = new Date();
-  const dd    = String(today.getDate()).padStart(2,'0');
-  const mm    = String(today.getMonth()+1).padStart(2,'0');
-  const yyyy  = today.getFullYear();
-  const fname = `${yyyy}${mm}${dd}_Etat_de_Projet.pdf`;
-  const dateStr = today.toLocaleDateString('fr-CH',{day:'2-digit',month:'long',year:'numeric'});
-
-  // Landscape A4 : 297 x 210 mm
+  const today = new Date(), dd = String(today.getDate()).padStart(2,'0'), mm = String(today.getMonth()+1).padStart(2,'0'), yyyy = today.getFullYear();
+  const fname = `${yyyy}${mm}${dd}_Etat_de_Projet.pdf`, dateStr = today.toLocaleDateString('fr-CH',{day:'2-digit',month:'long',year:'numeric'});
   const pdf = new jsPDF({ orientation:'landscape', unit:'mm', format:'a4' });
-  const W   = 297, H = 210;
-  const PAD = 10, HDR = 18, FTR = 8;
-  const CONTENT_H = H - HDR - FTR - PAD; // hauteur utile par page
-  const CONTENT_W = W - 2*PAD;
+  const W = 297, H = 210, PAD = 10, HDR = 18, FTR = 8;
+  const CONTENT_H = H - HDR - FTR - PAD, CONTENT_W = W - 2*PAD;
 
-  // -------- Helpers --------
   function drawHeader(title, pageLabel) {
-    // Bande bleue
-    pdf.setFillColor(22,58,95);
-    pdf.rect(0,0,W,HDR,'F');
-    // Trait orange en bas du header
-    pdf.setFillColor(232,135,58);
-    pdf.rect(0,HDR-1.5,W,1.5,'F');
-    pdf.setTextColor(255,255,255);
-    pdf.setFontSize(10); pdf.setFont('helvetica','bold');
-    pdf.text(title, PAD, 11.5);
-    pdf.setFontSize(8); pdf.setFont('helvetica','normal');
-    pdf.text(`${fname.replace('.pdf','')}   |   ${pageLabel}`, W-PAD, 11.5, {align:'right'});
+    pdf.setFillColor(22,58,95); pdf.rect(0,0,W,HDR,'F'); pdf.setFillColor(232,135,58); pdf.rect(0,HDR-1.5,W,1.5,'F');
+    pdf.setTextColor(255,255,255); pdf.setFontSize(10); pdf.setFont('helvetica','bold'); pdf.text(title, PAD, 11.5);
+    pdf.setFontSize(8); pdf.setFont('helvetica','normal'); pdf.text(`${fname.replace('.pdf','')}   |   ${pageLabel}`, W-PAD, 11.5, {align:'right'});
   }
-
   function drawFooter(page, total) {
-    pdf.setFillColor(240,244,249);
-    pdf.rect(0, H-FTR, W, FTR, 'F');
-    pdf.setTextColor(120,140,160);
-    pdf.setFontSize(7.5); pdf.setFont('helvetica','normal');
-    pdf.text('Groupe E Celsius — Dashboard Projets CAD — Confidentiel', PAD, H-2);
-    pdf.text(`Page ${page} / ${total}`, W-PAD, H-2, {align:'right'});
+    pdf.setFillColor(240,244,249); pdf.rect(0, H-FTR, W, FTR, 'F'); pdf.setTextColor(120,140,160); pdf.setFontSize(7.5); pdf.setFont('helvetica','normal');
+    pdf.text('Groupe E Celsius — Dashboard Projets CAD — Confidentiel', PAD, H-2); pdf.text(`Page ${page} / ${total}`, W-PAD, H-2, {align:'right'});
   }
 
-  // -------- Page de garde --------
-  pdf.setFillColor(22,58,95);
-  pdf.rect(0,0,W,H,'F');
-  // Bande décorative orange verticale gauche
-  pdf.setFillColor(232,135,58);
-  pdf.rect(0,0,8,H,'F');
-  // Bloc blanc centré
-  pdf.setFillColor(255,255,255);
-  pdf.roundedRect(30, 40, W-60, 130, 6, 6, 'F');
-  // Logo texte
-  pdf.setTextColor(22,58,95);
-  pdf.setFontSize(26); pdf.setFont('helvetica','bold');
-  pdf.text('Dashboard Projets CAD', W/2, 82, {align:'center'});
-  pdf.setFontSize(15); pdf.setFont('helvetica','normal');
-  pdf.text('Groupe E Celsius', W/2, 97, {align:'center'});
-  pdf.setDrawColor(232,135,58); pdf.setLineWidth(0.8);
-  pdf.line(W/2-40, 103, W/2+40, 103);
-  pdf.setFontSize(12); pdf.setTextColor(22,58,95);
-  pdf.text('\u00c9tat de Projet — SIA 5 — Réalisation', W/2, 112, {align:'center'});
-  pdf.setFontSize(10); pdf.setTextColor(90,122,154);
-  pdf.text(`Généré le ${dateStr}`, W/2, 124, {align:'center'});
-  // Nom fichier
-  pdf.setFontSize(9); pdf.setTextColor(180,190,200);
-  pdf.text(fname, W/2, 160, {align:'center'});
+  pdf.setFillColor(22,58,95); pdf.rect(0,0,W,H,'F'); pdf.setFillColor(232,135,58); pdf.rect(0,0,8,H,'F');
+  pdf.setFillColor(255,255,255); pdf.roundedRect(30, 40, W-60, 130, 6, 6, 'F');
+  pdf.setTextColor(22,58,95); pdf.setFontSize(26); pdf.setFont('helvetica','bold'); pdf.text('Dashboard Projets CAD', W/2, 82, {align:'center'});
+  pdf.setFontSize(15); pdf.setFont('helvetica','normal'); pdf.text('Groupe E Celsius', W/2, 97, {align:'center'});
+  pdf.setDrawColor(232,135,58); pdf.setLineWidth(0.8); pdf.line(W/2-40, 103, W/2+40, 103);
+  pdf.setFontSize(12); pdf.setTextColor(22,58,95); pdf.text('État de Projet — SIA 5 — Réalisation', W/2, 112, {align:'center'});
+  pdf.setFontSize(10); pdf.setTextColor(90,122,154); pdf.text(`Généré le ${dateStr}`, W/2, 124, {align:'center'});
+  pdf.setFontSize(9); pdf.setTextColor(180,190,200); pdf.text(fname, W/2, 160, {align:'center'});
 
-  // -------- Préparation des sections --------
-  // Sections simples : une image par page (pleine largeur)
-  // Sections doubles : 2 images côte à côte (camémberts)
   const sections = [
-    { id:'kpiSection',           title:'Indicateurs Clés de Performance', type:'kpi' },
-    { id:'cardCourbesS',         title:'Courbes S — Coûts Cumulés',       type:'full' },
-    { id:'tablePrevCard',        title:'Budget Révisé — Détails Mensuels', type:'full' },
-    // Camémberts en double
+    { id:'kpiSection', title:'Indicateurs Clés de Performance', type:'kpi' },
+    { id:'cardCourbesS', title:'Courbes S — Coûts Cumulés', type:'full' },
+    { id:'tablePrevCard', title:'Budget Révisé — Détails Mensuels', type:'full' },
     { ids:['cardPieBR','cardPieAT'], titles:['Répartition Budget Révisé','Répartition AT'], type:'double' },
-    { id:'cardBarProjet',        title:'Avancement par Projet (BR/AT/Réel)',type:'full' },
-    { id:'tableCmpCard',         title:'Comparatif par Projet',             type:'full' },
-    { id:'kpiSectionHonoraires', title:'KPI Honoraires',                    type:'kpi' },
-    { id:'cardHonoMetier',       title:'Honoraires par Type de Métier',     type:'full' },
-    { id:'tableRessCard',        title:'Coûts Réels par Ressource — Honoraires', type:'full' },
-    { id:'cardGantt',            title:'Planning Gantt',                    type:'full' },
-    { id:'tablePlanCard',        title:'Tableau Consolidé Planning',        type:'full' }
+    { id:'cardBarProjet', title:'Avancement par Projet (BR/AT/Réel)', type:'full' },
+    { id:'tableCmpCard', title:'Comparatif par Projet', type:'full' },
+    { id:'kpiSectionHonoraires', title:'KPI Honoraires', type:'kpi' },
+    { id:'cardHonoMetier', title:'Honoraires par Type de Métier', type:'full' },
+    { id:'tableRessCard', title:'Coûts Réels par Ressource — Honoraires', type:'full' },
+    { id:'cardGantt', title:'Planning Gantt', type:'full' },
+    { id:'tablePlanCard', title:'Tableau Consolidé Planning', type:'full' }
   ];
 
-  // Capture tous les canvases
   async function captureEl(id) {
-    const el = document.getElementById(id);
-    if(!el || el.style.display==='none') return null;
-    try {
-      return await html2canvas(el, { scale:2, backgroundColor:'#ffffff', logging:false, useCORS:true });
-    } catch(e) { console.warn('capture error', id, e); return null; }
+    const el = document.getElementById(id); if(!el || el.style.display==='none') return null;
+    try { return await html2canvas(el, { scale:2, backgroundColor:'#ffffff', logging:false, useCORS:true }); }
+    catch(e) { console.warn('capture error', id, e); return null; }
   }
-
-  // Pré-capturer tout
   const captured = {};
   for(const sec of sections) {
-    if(sec.type==='double') {
-      for(const id of sec.ids) captured[id] = await captureEl(id);
-    } else {
-      captured[sec.id] = await captureEl(sec.id);
-    }
+    if(sec.type==='double') { for(const id of sec.ids) captured[id] = await captureEl(id); }
+    else { captured[sec.id] = await captureEl(sec.id); }
   }
-
-  // Compter les pages réelles
-  let totalPages = 1; // garde
+  let totalPages = 1;
   for(const sec of sections) {
     if(sec.type==='double') { totalPages++; continue; }
-    const c = captured[sec.id]; if(!c) continue;
-    const imgH = CONTENT_W * (c.height/c.width);
-    totalPages += Math.ceil(imgH/CONTENT_H);
+    const c = captured[sec.id]; if(!c) continue; const imgH = CONTENT_W * (c.height/c.width); totalPages += Math.ceil(imgH/CONTENT_H);
   }
-
-  // ---- Génération des pages ----
-  let pageNum = 1;
-
-  // Fermer la page de garde (déjà créée)
-  drawFooter(pageNum, totalPages);
+  let pageNum = 1; drawFooter(pageNum, totalPages);
 
   for(const sec of sections) {
-
-    // --- Type DOUBLE (2 camémberts côte à côte) ---
     if(sec.type === 'double') {
-      const canvases = sec.ids.map(id=>captured[id]).filter(Boolean);
-      if(!canvases.length) continue;
-      pageNum++;
-      pdf.addPage();
-      drawHeader(sec.titles.join('  /  '), `${pageNum}/${totalPages}`);
-      drawFooter(pageNum, totalPages);
-      const colW = (CONTENT_W-8)/2;
-      const yTop = HDR+PAD;
+      const canvases = sec.ids.map(id=>captured[id]).filter(Boolean); if(!canvases.length) continue; pageNum++; pdf.addPage();
+      drawHeader(sec.titles.join('  /  '), `${pageNum}/${totalPages}`); drawFooter(pageNum, totalPages);
+      const colW = (CONTENT_W-8)/2, yTop = HDR+PAD;
       canvases.forEach((c,ci) => {
-        const xOff = PAD + ci*(colW+8);
-        const ratio = c.height/c.width;
-        const iH = Math.min(colW*ratio, CONTENT_H-6);
-        // Fond blanc arrondi
-        pdf.setFillColor(255,255,255);
-        pdf.roundedRect(xOff-2, yTop-2, colW+4, iH+4+10, 3, 3, 'F');
-        pdf.setDrawColor(220,228,240); pdf.setLineWidth(0.4);
-        pdf.roundedRect(xOff-2, yTop-2, colW+4, iH+4+10, 3, 3, 'S');
-        // Titre de la section
-        pdf.setFontSize(9); pdf.setFont('helvetica','bold');
-        pdf.setTextColor(22,58,95);
-        pdf.text(sec.titles[ci]||'', xOff+colW/2, yTop+7, {align:'center'});
-        // Image
-        const imgData = c.toDataURL('image/jpeg',0.92);
-        pdf.addImage(imgData,'JPEG', xOff, yTop+10, colW, iH);
+        const xOff = PAD + ci*(colW+8), ratio = c.height/c.width, iH = Math.min(colW*ratio, CONTENT_H-6);
+        pdf.setFillColor(255,255,255); pdf.roundedRect(xOff-2, yTop-2, colW+4, iH+4+10, 3, 3, 'F');
+        pdf.setDrawColor(220,228,240); pdf.setLineWidth(0.4); pdf.roundedRect(xOff-2, yTop-2, colW+4, iH+4+10, 3, 3, 'S');
+        pdf.setFontSize(9); pdf.setFont('helvetica','bold'); pdf.setTextColor(22,58,95); pdf.text(sec.titles[ci]||'', xOff+colW/2, yTop+7, {align:'center'});
+        const imgData = c.toDataURL('image/jpeg',0.92); pdf.addImage(imgData,'JPEG', xOff, yTop+10, colW, iH);
       });
       continue;
     }
-
-    // --- Type KPI : on rend les cartes en bande compacte ---
     if(sec.type === 'kpi') {
-      const c = captured[sec.id]; if(!c) continue;
-      const imgH_mm = CONTENT_W * (c.height/c.width);
-      // KPI est en général court, on le place en haut d'une nouvelle page
-      pageNum++;
-      pdf.addPage();
-      drawHeader(sec.title, `${pageNum}/${totalPages}`);
-      drawFooter(pageNum, totalPages);
-      const iH = Math.min(imgH_mm, CONTENT_H);
-      const imgData = c.toDataURL('image/jpeg',0.93);
-      pdf.addImage(imgData,'JPEG', PAD, HDR+4, CONTENT_W, iH);
-      continue;
+      const c = captured[sec.id]; if(!c) continue; const imgH_mm = CONTENT_W * (c.height/c.width); pageNum++; pdf.addPage();
+      drawHeader(sec.title, `${pageNum}/${totalPages}`); drawFooter(pageNum, totalPages); const iH = Math.min(imgH_mm, CONTENT_H);
+      const imgData = c.toDataURL('image/jpeg',0.93); pdf.addImage(imgData,'JPEG', PAD, HDR+4, CONTENT_W, iH); continue;
     }
-
-    // --- Type FULL : pleine largeur, pagination si trop long ---
-    const c = captured[sec.id]; if(!c) continue;
-    const srcW = c.width, srcH = c.height;
-    const imgH_mm = CONTENT_W * (srcH/srcW);
-    const pagesNeeded = Math.ceil(imgH_mm / CONTENT_H);
-
+    const c = captured[sec.id]; if(!c) continue; const srcW = c.width, srcH = c.height;
+    const imgH_mm = CONTENT_W * (srcH/srcW), pagesNeeded = Math.ceil(imgH_mm / CONTENT_H);
     for(let pg=0; pg<pagesNeeded; pg++) {
-      pageNum++;
-      pdf.addPage();
-      const titleSuffix = pagesNeeded>1 ? ` (${pg+1}/${pagesNeeded})` : '';
-      drawHeader(sec.title+titleSuffix, `${pageNum}/${totalPages}`);
-      drawFooter(pageNum, totalPages);
-
-      // Crop vertical
-      const slicePxH   = Math.ceil(srcH/pagesNeeded);
-      const srcYStart  = pg*slicePxH;
-      const srcYEnd    = Math.min(srcYStart+slicePxH, srcH);
-      const sl = document.createElement('canvas');
-      sl.width  = srcW;
-      sl.height = srcYEnd-srcYStart;
-      sl.getContext('2d').drawImage(c, 0, -srcYStart);
-      const slData  = sl.toDataURL('image/jpeg',0.92);
-      const slH_mm  = CONTENT_W*(sl.height/sl.width);
-      pdf.addImage(slData,'JPEG', PAD, HDR+4, CONTENT_W, Math.min(slH_mm, CONTENT_H));
+      pageNum++; pdf.addPage(); const titleSuffix = pagesNeeded>1 ? ` (${pg+1}/${pagesNeeded})` : '';
+      drawHeader(sec.title+titleSuffix, `${pageNum}/${totalPages}`); drawFooter(pageNum, totalPages);
+      const slicePxH = Math.ceil(srcH/pagesNeeded), srcYStart = pg*slicePxH, srcYEnd = Math.min(srcYStart+slicePxH, srcH);
+      const sl = document.createElement('canvas'); sl.width = srcW; sl.height = srcYEnd-srcYStart;
+      sl.getContext('2d').drawImage(c, 0, -srcYStart); const slData = sl.toDataURL('image/jpeg',0.92);
+      const slH_mm = CONTENT_W*(sl.height/sl.width); pdf.addImage(slData,'JPEG', PAD, HDR+4, CONTENT_W, Math.min(slH_mm, CONTENT_H));
     }
   }
-
   pdf.save(fname);
 }
