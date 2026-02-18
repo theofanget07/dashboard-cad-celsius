@@ -1,7 +1,8 @@
 /* ============================================================
    Dashboard CAD — Groupe E Celsius
-   script.js  v4.2  — 18/02/2026
-   Fix Gantt: y=yLabels[idx] au lieu de y=idx pour axe category
+   script.js  v4.3  — 18/02/2026
+   Fix Gantt: y=yLabels[idx] (string catégorique)
+   v4.3: barres Gantt plus épaisses (barPercentage 0.85, categoryPercentage 1.0)
    ============================================================ */
 
 // ---- Globals ----
@@ -429,7 +430,7 @@ function buildTablePlanning(plan) {
 }
 
 // ============================================================
-// GANTT  v4.2  —  FIX: y = yLabels[idx] (string catégorique)
+// GANTT  v4.3  — barres épaisses : barPercentage 0.85, categoryPercentage 1.0
 // ============================================================
 function drawGantt(plan) {
   const allD = [];
@@ -442,14 +443,14 @@ function drawGantt(plan) {
 
   // Labels Y catégoriques
   const yLabels = [];
-  PROJECT_ORDER.forEach((id, projIdx) => {
+  PROJECT_ORDER.forEach((id) => {
     const n = getPN(id);
     yLabels.push(`${n}  ▶ BR`);
     yLabels.push(`${n}  ● AT`);
     yLabels.push(`${n}  ■ Réel`);
   });
 
-  // Datasets : y doit être le LABEL (string) pas l'index
+  // Datasets : y = label catégorique (string)
   const datasets = [];
   const pushBar = (label, s, e, color, yLabel) => {
     if(!s||!e||isNaN(s)||isNaN(e)) return;
@@ -475,6 +476,10 @@ function drawGantt(plan) {
     data: { labels: yLabels, datasets },
     options: {
       indexAxis: 'y', responsive: true, maintainAspectRatio: false,
+      // ---- v4.3 : barres plus épaisses ----
+      barPercentage: 0.85,
+      categoryPercentage: 1.0,
+      // -------------------------------------
       plugins: {
         legend: { display: false },
         tooltip: { callbacks: {
@@ -498,8 +503,7 @@ function drawGantt(plan) {
             color: ctx => { const i = yLabels.indexOf(ctx.tick.label); return (i>=0 && i%3===0) ? '#163a5f' : '#5a7a9a'; }
           }
         }
-      },
-      barPercentage: 0.6, categoryPercentage: 0.9
+      }
     }
   });
 }
@@ -527,7 +531,7 @@ function exportTableXLSX(tableId, sheetName) {
 window.exportTableXLSX = exportTableXLSX;
 
 // ============================================================
-// PDF  v4.2
+// PDF  v4.3
 // ============================================================
 async function generatePDF() {
   const { jsPDF } = window.jspdf;
