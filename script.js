@@ -1,10 +1,9 @@
 /* ============================================================
    Dashboard CAD — Groupe E Celsius
-   script.js  v4.0  — 18/02/2026
-   - Gantt lisibilité (barres hautes, labels clairs, zebra)
-   - Camembert couleurs contrastées (non-bleu)
-   - Honoraires ext / int séparés avec sous-totaux
-   - PDF complet : toutes sections de la page (KPI inclus)
+   script.js  v4.1  — 18/02/2026
+   Fix: Gantt axe Y catégorique (labels réels),
+        camembert palette classique sobre,
+        PDF landscape A4 optimisé (2 colonnes, pages pleines)
    ============================================================ */
 
 // ---- Globals ----
@@ -39,28 +38,23 @@ const PROJECT_NAMES = {
 const PROJECT_ORDER = Object.keys(PROJECT_NAMES);
 function getPN(id) { return PROJECT_NAMES[id] || id; }
 
-// ---- Palette ----
-const GE_BLUE       = '#163a5f';
-const GE_BLUE2      = '#1e4d8c';
-const GE_BLUE3      = '#2e6db4';
-const GE_BLUE4      = '#5b9bd5';
-const GE_ORANGE     = '#f59e0b';
-const GE_RED        = '#ef4444';
-const GE_GREEN      = '#10b981';
-const GE_TEAL       = '#14b8a6';
-const GE_PURPLE     = '#8b5cf6';
-const GE_PINK       = '#ec4899';
-const GE_LIME       = '#84cc16';
-const GE_AMBER      = '#f97316';
+// ---- Palette Groupe E ----
+const GE_BLUE  = '#163a5f';
+const GE_BLUE2 = '#1e4d8c';
+const GE_BLUE3 = '#2e6db4';
+const GE_BLUE4 = '#5b9bd5';
+const GE_ORANGE = '#e8873a';   // orange brique sobre
+const GE_RED    = '#c0392b';   // rouge sombre
+const GE_GREEN  = '#27ae60';   // vert mat
 
-// Camembert : couleurs contrastes NON bleues
+// Camembert — palette classique sobre, bien contrastée
 const PIE_COLORS = [
-  '#f59e0b',  // orange
-  '#10b981',  // vert
-  '#ec4899',  // rose
-  '#8b5cf6',  // violet
-  '#f97316',  // amber
-  '#14b8a6'   // teal
+  '#2e6db4',   // bleu moyen
+  '#e8873a',   // orange brique
+  '#27ae60',   // vert
+  '#8e44ad',   // violet
+  '#c0392b',   // rouge
+  '#16a085'    // teal sombre
 ];
 
 // ============================================================
@@ -81,11 +75,9 @@ function toNum(v) {
   if (typeof v !== 'string') return 0;
   return parseFloat(v.replace(/[\u00A0\u202F']/g, '').replace(/[ ]/g, '').replace(',', '.')) || 0;
 }
-
 function toCHF(n) {
   return (n || 0).toLocaleString('fr-CH', { minimumFractionDigits: 0 });
 }
-
 function toDate(v) {
   if (v instanceof Date && !isNaN(v)) return v;
   if (typeof v === 'number') return new Date(Date.UTC(1899, 11, 30) + v * 86400000);
@@ -98,50 +90,37 @@ function toDate(v) {
   }
   return null;
 }
-
 function firstOfMonth(d) { return new Date(d.getFullYear(), d.getMonth(), 1); }
 function yyyymm(d)       { return `${d.getFullYear()}-${String(d.getMonth()+1).padStart(2,'0')}`; }
-
 function buildAxis(minD, maxD) {
-  const axis = [];
-  const c = firstOfMonth(minD), e = firstOfMonth(maxD);
+  const axis = [], c = firstOfMonth(minD), e = firstOfMonth(maxD);
   while (c <= e) { axis.push(yyyymm(c)); c.setMonth(c.getMonth()+1); }
   return axis;
 }
 
 function sCurve(total, axis, k, sIdx, eIdx) {
-  const N   = axis.length;
-  const cum = Array(N).fill(null);
-  const L   = eIdx - sIdx + 1;
+  const N = axis.length, cum = Array(N).fill(null), L = eIdx - sIdx + 1;
   if (L <= 0 || total === 0 || sIdx < 0 || eIdx < 0) return cum;
-  const s0 = 1 / (1 + Math.exp(-k * (0 - 0.5)));
-  const s1 = 1 / (1 + Math.exp(-k * (1 - 0.5)));
+  const s0 = 1/(1+Math.exp(-k*(0-0.5))), s1 = 1/(1+Math.exp(-k*(1-0.5)));
   for (let j = 0; j < L; j++) {
-    const i = sIdx + j;
-    if (i >= N) break;
-    const x  = j / (L - 1 || 1);
-    const sx = 1 / (1 + Math.exp(-k * (x - 0.5)));
-    cum[i]   = ((sx - s0) / (s1 - s0)) * total;
+    const i = sIdx + j; if (i >= N) break;
+    const x = j/(L-1||1), sx = 1/(1+Math.exp(-k*(x-0.5)));
+    cum[i] = ((sx-s0)/(s1-s0))*total;
   }
   return cum;
 }
 
 function modelRange(rows, modelName, axis) {
   const filtered = rows.filter(r => r['Modèle de prévision'] === modelName);
-  const dates = filtered.flatMap(r => [
-    toDate(r['Date de début']), toDate(r['Date de fin'])
-  ]).filter(Boolean);
+  const dates = filtered.flatMap(r => [toDate(r['Date de début']), toDate(r['Date de fin'])]).filter(Boolean);
   if (!dates.length) return [-1, -1];
-  const minD   = new Date(Math.min(...dates));
-  const maxD   = new Date(Math.max(...dates));
-  const mmMin  = yyyymm(firstOfMonth(minD));
-  const mmMax  = yyyymm(firstOfMonth(maxD));
-  let sIdx     = axis.indexOf(mmMin);
-  let eIdx     = axis.indexOf(mmMax);
+  const minD = new Date(Math.min(...dates)), maxD = new Date(Math.max(...dates));
+  const mmMin = yyyymm(firstOfMonth(minD)), mmMax = yyyymm(firstOfMonth(maxD));
+  let sIdx = axis.indexOf(mmMin), eIdx = axis.indexOf(mmMax);
   if (sIdx < 0) sIdx = axis.findIndex(m => m >= mmMin);
   if (eIdx < 0) { for (let i = axis.length-1; i >= 0; i--) { if (axis[i] <= mmMax) { eIdx = i; break; } } }
   if (sIdx < 0) sIdx = 0;
-  if (eIdx < 0) eIdx = axis.length - 1;
+  if (eIdx < 0) eIdx = axis.length-1;
   return [sIdx, eIdx];
 }
 
@@ -153,20 +132,16 @@ const todayLinePlugin = {
     const { ctx, chartArea: { top, bottom }, scales: { x } } = ch;
     const labels = ch.data.labels;
     const toT    = s => { const [y,m] = s.split('-'); return new Date(+y,+m-1,1).getTime(); };
-    const t      = toT(opts.label);
+    const t = toT(opts.label);
     let bi = 0, bd = Infinity;
-    labels.forEach((l, i) => { const d = Math.abs(toT(l) - t); if (d < bd) { bd = d; bi = i; } });
+    labels.forEach((l,i) => { const d = Math.abs(toT(l)-t); if (d < bd) { bd=d; bi=i; } });
     const xp = x.getPixelForValue(bi);
     ctx.save();
-    ctx.strokeStyle = GE_RED;
-    ctx.lineWidth   = 2;
-    ctx.setLineDash([5, 5]);
+    ctx.strokeStyle = GE_RED; ctx.lineWidth = 2; ctx.setLineDash([5,5]);
     ctx.beginPath(); ctx.moveTo(xp, top); ctx.lineTo(xp, bottom); ctx.stroke();
     ctx.setLineDash([]);
-    ctx.fillStyle = GE_RED;
-    ctx.font      = 'bold 11px Arial';
-    ctx.textAlign = 'center';
-    ctx.fillText("Aujourd'hui", xp, top - 5);
+    ctx.fillStyle = GE_RED; ctx.font = 'bold 11px Arial'; ctx.textAlign = 'center';
+    ctx.fillText("Aujourd'hui", xp, top-5);
     ctx.restore();
   }
 };
@@ -174,17 +149,10 @@ const todayLinePlugin = {
 // ============================================================
 // EVENTS
 // ============================================================
-prevInput.addEventListener('change', e => {
-  if (e.target.files[0]) readExcel(e.target.files[0], rows => { prevRows = rows; maybeProcess(); });
-});
-realInput.addEventListener('change', e => {
-  if (e.target.files[0]) readExcel(e.target.files[0], rows => { realRows = rows; maybeProcess(); });
-});
+prevInput.addEventListener('change', e => { if (e.target.files[0]) readExcel(e.target.files[0], rows => { prevRows = rows; maybeProcess(); }); });
+realInput.addEventListener('change', e => { if (e.target.files[0]) readExcel(e.target.files[0], rows => { realRows = rows; maybeProcess(); }); });
 [kSlider, kNumber].forEach(el => {
-  el.addEventListener('input', () => {
-    kSlider.value = kNumber.value = el.value;
-    if (prevRows.length && realRows.length) processAll();
-  });
+  el.addEventListener('input', () => { kSlider.value = kNumber.value = el.value; if (prevRows.length && realRows.length) processAll(); });
 });
 [viewGlobalEl, viewSOnlyEl].forEach(el => {
   el.addEventListener('change', () => { if (prevRows.length && realRows.length) processAll(); });
@@ -192,8 +160,7 @@ realInput.addEventListener('change', e => {
 document.getElementById('btnApplyPlanning').addEventListener('click', () => {
   if (!prevRows.length || !realRows.length) return;
   PROJECT_ORDER.forEach(id => {
-    const s = document.getElementById(`rs_${id}`);
-    const e = document.getElementById(`re_${id}`);
+    const s = document.getElementById(`rs_${id}`), e = document.getElementById(`re_${id}`);
     if (!manualPlanningDates[id]) manualPlanningDates[id] = {};
     manualPlanningDates[id].start = s && s.value ? new Date(s.value) : null;
     manualPlanningDates[id].end   = e && e.value ? new Date(e.value) : null;
@@ -209,72 +176,59 @@ function maybeProcess() {
     processAll();
   }
 }
-
-function processAll() {
-  processBudgets();
-  processImputations();
-  processPlanning();
-}
+function processAll() { processBudgets(); processImputations(); processPlanning(); }
 
 // ============================================================
 // PARTIE 1 — BUDGETS
 // ============================================================
 function processBudgets() {
-  const k        = parseFloat(kNumber.value) || 12;
-  const MODELS   = ['Budget', 'Budget_Rev', 'AT'];
-  const isSOnly  = viewSOnlyEl.checked;
+  const k = parseFloat(kNumber.value) || 12;
+  const MODELS = ['Budget', 'Budget_Rev', 'AT'];
+  const isSOnly = viewSOnlyEl.checked;
 
   const model = {};
   MODELS.forEach(mn => {
     const rows  = prevRows.filter(r => r['Modèle de prévision'] === mn);
-    const total = rows.reduce((a, r) => a + toNum(r['Montant total du coût']), 0);
+    const total = rows.reduce((a,r) => a+toNum(r['Montant total du coût']), 0);
     const dates = rows.flatMap(r => [toDate(r['Date de début']), toDate(r['Date de fin'])]).filter(Boolean);
     model[mn] = { total, start: dates.length ? new Date(Math.min(...dates)) : null, end: dates.length ? new Date(Math.max(...dates)) : null };
   });
 
   const realDates = realRows.map(r => toDate(r['Date du projet'])).filter(Boolean);
   const allDates  = [];
-  MODELS.forEach(mn => { if (model[mn].start) allDates.push(model[mn].start); if (model[mn].end) allDates.push(model[mn].end); });
+  MODELS.forEach(mn => { if(model[mn].start) allDates.push(model[mn].start); if(model[mn].end) allDates.push(model[mn].end); });
   realDates.forEach(d => allDates.push(d));
   if (!allDates.length) { statusEl.textContent = '\u26a0\ufe0f Aucune date trouvée.'; return; }
 
-  const globalMin = new Date(Math.min(...allDates));
-  const globalMax = new Date(Math.max(...allDates));
-  const modelMin  = new Date(Math.min(...MODELS.filter(m => model[m].start).map(m => model[m].start)));
-  const modelMax  = new Date(Math.max(...MODELS.filter(m => model[m].end).map(m => model[m].end)));
+  const globalMin = new Date(Math.min(...allDates)), globalMax = new Date(Math.max(...allDates));
+  const modelMin  = new Date(Math.min(...MODELS.filter(m=>model[m].start).map(m=>model[m].start)));
+  const modelMax  = new Date(Math.max(...MODELS.filter(m=>model[m].end).map(m=>model[m].end)));
   const axisMin   = isSOnly ? modelMin : globalMin;
   const axisMax   = isSOnly ? modelMax : globalMax;
   const axis      = buildAxis(axisMin, axisMax);
 
   const series = {};
-  MODELS.forEach(mn => {
-    const [si, ei] = modelRange(prevRows, mn, axis);
-    series[mn] = sCurve(model[mn].total, axis, k, si, ei);
-  });
+  MODELS.forEach(mn => { const [si,ei] = modelRange(prevRows, mn, axis); series[mn] = sCurve(model[mn].total, axis, k, si, ei); });
 
-  const today   = new Date();
-  const mmToday = yyyymm(today);
+  const today   = new Date(), mmToday = yyyymm(today);
   const realMap = new Map(axis.map(m => [m, 0]));
   let   initCum = 0;
   realRows.forEach(r => {
-    const d = toDate(r['Date du projet']);
-    if (!d) return;
-    const mm = yyyymm(firstOfMonth(d));
-    if (mm > mmToday) return;
-    if (realMap.has(mm)) realMap.set(mm, realMap.get(mm) + toNum(r['Montant total du coût']));
+    const d = toDate(r['Date du projet']); if (!d) return;
+    const mm = yyyymm(firstOfMonth(d)); if (mm > mmToday) return;
+    if (realMap.has(mm)) realMap.set(mm, realMap.get(mm)+toNum(r['Montant total du coût']));
     else if (isSOnly && mm < axis[0]) initCum += toNum(r['Montant total du coût']);
   });
 
-  const realMonth = axis.map(m => realMap.get(m) || 0);
+  const realMonth = axis.map(m => realMap.get(m)||0);
   let acc = initCum;
-  const realCum = realMonth.map(v => { acc += v; return acc; });
-  const realCut = realCum.map((v, i) => axis[i] > mmToday ? null : v);
+  const realCum = realMonth.map(v => { acc+=v; return acc; });
+  const realCut = realCum.map((v,i) => axis[i] > mmToday ? null : v);
 
-  const totalBR = model['Budget_Rev'].total;
-  const totalAT = model['AT'].total;
-  const totalR  = realCum[realCum.length - 1] || 0;
-  const ecart   = totalR - totalAT;
-  const pct     = totalAT > 0 ? (totalR / totalAT * 100).toFixed(1) : 0;
+  const totalBR = model['Budget_Rev'].total, totalAT = model['AT'].total;
+  const totalR  = realCum[realCum.length-1]||0;
+  const ecart   = totalR-totalAT;
+  const pct     = totalAT > 0 ? (totalR/totalAT*100).toFixed(1) : 0;
   kpiSection.style.display = 'grid';
   kpiSection.innerHTML = `
     <div class="kpi-card"><div class="kpi-label">Budget Révisé Total</div><div class="kpi-value">${toCHF(totalBR)}</div><div class="kpi-unit">CHF</div></div>
@@ -289,17 +243,16 @@ function processBudgets() {
   drawBarChart();
   drawPieCharts();
   buildTableCompare();
-
   statusEl.textContent = '\u2705 Calcul terminé avec succès';
   statusEl.className   = 'status success';
 }
 
 function drawCourbesS(axis, series, realCut, today) {
   const ds = [
-    { label:'Budget (S cumul)',        data:series['Budget'],     borderColor:GE_BLUE4,  backgroundColor:'rgba(91,155,213,0.07)', pointRadius:0, tension:0.3, spanGaps:true },
-    { label:'Budget Révisé (S cumul)', data:series['Budget_Rev'], borderColor:GE_ORANGE, backgroundColor:'rgba(245,158,11,0.07)', pointRadius:0, tension:0.3, spanGaps:true, borderWidth:3 },
-    { label:'AT (S cumul)',            data:series['AT'],         borderColor:GE_BLUE2,  backgroundColor:'rgba(30,77,140,0.07)',  pointRadius:0, tension:0.3, spanGaps:true },
-    { label:'Réels cumulés',           data:realCut,              borderColor:GE_RED,    backgroundColor:'rgba(239,68,68,0.07)', pointRadius:2, pointHoverRadius:5, tension:0.3, spanGaps:true, borderWidth:3 }
+    { label:'Budget (S cumul)',        data:series['Budget'],     borderColor:GE_BLUE4,   backgroundColor:'rgba(91,155,213,0.07)', pointRadius:0, tension:0.3, spanGaps:true },
+    { label:'Budget Révisé (S cumul)', data:series['Budget_Rev'], borderColor:GE_ORANGE,  backgroundColor:'rgba(232,135,58,0.07)', pointRadius:0, tension:0.3, spanGaps:true, borderWidth:3 },
+    { label:'AT (S cumul)',            data:series['AT'],         borderColor:GE_BLUE2,   backgroundColor:'rgba(30,77,140,0.07)',  pointRadius:0, tension:0.3, spanGaps:true },
+    { label:'Réels cumulés',           data:realCut,              borderColor:GE_RED,     backgroundColor:'rgba(192,57,43,0.07)', pointRadius:2, pointHoverRadius:5, tension:0.3, spanGaps:true, borderWidth:3 }
   ];
   const opts = {
     responsive:true, maintainAspectRatio:false,
@@ -322,15 +275,13 @@ function buildTablePreview(axis, brCum, realMonth, initCum) {
   tablePrev.innerHTML = `<thead><tr><th>Mois</th><th>Montant BR (S)</th><th>Cumul BR (S)</th><th>Réel / mois</th><th>Réel cumulé</th><th>Écart</th></tr></thead><tbody></tbody>`;
   const tbody = tablePrev.querySelector('tbody');
   let cumBR = 0, cumR = initCum;
-  axis.forEach((m, i) => {
-    const brVal   = brCum[i];
-    const rVal    = realMonth[i] || 0;
+  axis.forEach((m,i) => {
+    const brVal = brCum[i], rVal = realMonth[i]||0;
     if (brVal !== null) cumBR = brVal;
-    const monthBR = (brVal !== null && i === 0) ? brVal
-                  : (brVal !== null && brCum[i-1] !== null) ? brVal - brCum[i-1] : 0;
+    const monthBR = (brVal !== null && i === 0) ? brVal : (brVal !== null && brCum[i-1] !== null) ? brVal-brCum[i-1] : 0;
     cumR += rVal;
     if (brVal === null && rVal === 0 && cumR <= initCum) return;
-    const ecart = cumR - cumBR;
+    const ecart = cumR-cumBR;
     const tr = document.createElement('tr');
     tr.innerHTML = `<td>${m}</td><td>${toCHF(monthBR)}</td><td>${toCHF(brVal)}</td><td>${toCHF(rVal)}</td><td>${toCHF(cumR)}</td><td class="${ecart<=0?'positive':'negative'}">${toCHF(ecart)}</td>`;
     tbody.appendChild(tr);
@@ -339,8 +290,7 @@ function buildTablePreview(axis, brCum, realMonth, initCum) {
 
 function buildTableCompare() {
   tableCmp.innerHTML = `<thead><tr><th>Projet</th><th>Budget</th><th>Budget Révisé</th><th>AT</th><th>Réel</th><th>Écart / Rev</th><th>Écart / AT</th><th>% / AT</th></tr></thead><tbody></tbody><tfoot></tfoot>`;
-  const tb = tableCmp.querySelector('tbody');
-  const tf = tableCmp.querySelector('tfoot');
+  const tb = tableCmp.querySelector('tbody'), tf = tableCmp.querySelector('tfoot');
   let sB=0,sBR=0,sAT=0,sR=0;
   PROJECT_ORDER.forEach(id => {
     const b  = prevRows.filter(r=>r['ID projet']===id&&r['Modèle de prévision']==='Budget').reduce((a,r)=>a+toNum(r['Montant total du coût']),0);
@@ -348,36 +298,37 @@ function buildTableCompare() {
     const at = prevRows.filter(r=>r['ID projet']===id&&r['Modèle de prévision']==='AT').reduce((a,r)=>a+toNum(r['Montant total du coût']),0);
     const rr = realRows.filter(r=>r['ID Projet']===id).reduce((a,r)=>a+toNum(r['Montant total du coût']),0);
     sB+=b;sBR+=br;sAT+=at;sR+=rr;
-    const eR=rr-br, eA=rr-at;
-    const pct=at>0?(rr/at*100).toFixed(1)+'%':'—';
+    const eR=rr-br, eA=rr-at, pct=at>0?(rr/at*100).toFixed(1)+'%':'—';
     tb.insertAdjacentHTML('beforeend',`<tr><td><strong>${getPN(id)}</strong></td><td>${toCHF(b)}</td><td>${toCHF(br)}</td><td>${toCHF(at)}</td><td>${toCHF(rr)}</td><td class="${eR<=0?'positive':'negative'}">${toCHF(eR)}</td><td class="${eA<=0?'positive':'negative'}">${toCHF(eA)}</td><td>${pct}</td></tr>`);
   });
-  const pT=sAT>0?(sR/sAT*100).toFixed(1)+'%':'—';
-  tf.innerHTML=`<tr><td><strong>TOTAL</strong></td><td>${toCHF(sB)}</td><td>${toCHF(sBR)}</td><td>${toCHF(sAT)}</td><td>${toCHF(sR)}</td><td class="${sR-sBR<=0?'positive':'negative'}">${toCHF(sR-sBR)}</td><td class="${sR-sAT<=0?'positive':'negative'}">${toCHF(sR-sAT)}</td><td><strong>${pT}</strong></td></tr>`;
+  const pT = sAT>0?(sR/sAT*100).toFixed(1)+'%':'—';
+  tf.innerHTML = `<tr><td><strong>TOTAL</strong></td><td>${toCHF(sB)}</td><td>${toCHF(sBR)}</td><td>${toCHF(sAT)}</td><td>${toCHF(sR)}</td><td class="${sR-sBR<=0?'positive':'negative'}">${toCHF(sR-sBR)}</td><td class="${sR-sAT<=0?'positive':'negative'}">${toCHF(sR-sAT)}</td><td><strong>${pT}</strong></td></tr>`;
 }
 
 function drawPieCharts() {
   const labelsBR=[],dataBR=[],labelsAT=[],dataAT=[];
   PROJECT_ORDER.forEach(id => {
-    const br=prevRows.filter(r=>r['ID projet']===id&&r['Modèle de prévision']==='Budget_Rev').reduce((a,r)=>a+toNum(r['Montant total du coût']),0);
-    const at=prevRows.filter(r=>r['ID projet']===id&&r['Modèle de prévision']==='AT').reduce((a,r)=>a+toNum(r['Montant total du coût']),0);
+    const br = prevRows.filter(r=>r['ID projet']===id&&r['Modèle de prévision']==='Budget_Rev').reduce((a,r)=>a+toNum(r['Montant total du coût']),0);
+    const at = prevRows.filter(r=>r['ID projet']===id&&r['Modèle de prévision']==='AT').reduce((a,r)=>a+toNum(r['Montant total du coût']),0);
     if(br>0){labelsBR.push(getPN(id));dataBR.push(br);}
     if(at>0){labelsAT.push(getPN(id));dataAT.push(at);}
   });
-  const pieCfg = (labels,data) => ({
-    type:'pie',
-    data:{ labels, datasets:[{ data, backgroundColor:PIE_COLORS, borderWidth:2, borderColor:'#fff' }] },
-    options:{ responsive:true, maintainAspectRatio:false,
-      plugins:{
-        legend:{position:'right',labels:{font:{size:12},padding:14,usePointStyle:true}},
-        tooltip:{callbacks:{label:ctx=>`${ctx.label}: ${toCHF(ctx.parsed)} CHF (${((ctx.parsed/data.reduce((a,b)=>a+b,0))*100).toFixed(1)}%)`}}
+  const total = arr => arr.reduce((a,b)=>a+b,0);
+  const pieCfg = (labels, data) => ({
+    type: 'pie',
+    data: { labels, datasets: [{ data, backgroundColor: PIE_COLORS, borderWidth: 2, borderColor: '#ffffff' }] },
+    options: {
+      responsive: true, maintainAspectRatio: false,
+      plugins: {
+        legend: { position: 'right', labels: { font:{size:12}, padding:14, usePointStyle:true, boxWidth:12 } },
+        tooltip: { callbacks: { label: ctx => `${ctx.label}: ${toCHF(ctx.parsed)} CHF (${((ctx.parsed/total(data))*100).toFixed(1)}%)` } }
       }
     }
   });
   if(chartPieBudgetRev) chartPieBudgetRev.destroy();
   if(chartPieAT)        chartPieAT.destroy();
-  chartPieBudgetRev = new Chart(document.getElementById('chartPieBudgetRev').getContext('2d'), pieCfg(labelsBR,dataBR));
-  chartPieAT        = new Chart(document.getElementById('chartPieAT').getContext('2d'),        pieCfg(labelsAT,dataAT));
+  chartPieBudgetRev = new Chart(document.getElementById('chartPieBudgetRev').getContext('2d'), pieCfg(labelsBR, dataBR));
+  chartPieAT        = new Chart(document.getElementById('chartPieAT').getContext('2d'),        pieCfg(labelsAT, dataAT));
 }
 
 function drawBarChart() {
@@ -389,16 +340,16 @@ function drawBarChart() {
     dR.push(realRows.filter(r=>r['ID Projet']===id).reduce((a,r)=>a+toNum(r['Montant total du coût']),0));
   });
   if(chartBar) chartBar.destroy();
-  chartBar=new Chart(document.getElementById('chartBar').getContext('2d'),{
+  chartBar = new Chart(document.getElementById('chartBar').getContext('2d'), {
     type:'bar',
-    data:{labels,datasets:[
-      {label:'Budget Révisé',data:dBR,backgroundColor:GE_ORANGE},
-      {label:'AT',data:dAT,backgroundColor:GE_BLUE2},
-      {label:'Réel',data:dR,backgroundColor:GE_RED}
+    data:{ labels, datasets:[
+      {label:'Budget Révisé', data:dBR, backgroundColor:GE_ORANGE},
+      {label:'AT',             data:dAT, backgroundColor:GE_BLUE2},
+      {label:'Réel',           data:dR,  backgroundColor:GE_RED}
     ]},
-    options:{indexAxis:'y',responsive:true,maintainAspectRatio:false,
-      plugins:{legend:{position:'top'},tooltip:{callbacks:{label:ctx=>`${ctx.dataset.label}: ${toCHF(ctx.parsed.x)} CHF`}}},
-      scales:{x:{ticks:{callback:v=>toCHF(v)}}}
+    options:{ indexAxis:'y', responsive:true, maintainAspectRatio:false,
+      plugins:{ legend:{position:'top'}, tooltip:{callbacks:{label:ctx=>`${ctx.dataset.label}: ${toCHF(ctx.parsed.x)} CHF`}} },
+      scales:{ x:{ticks:{callback:v=>toCHF(v)}} }
     }
   });
 }
@@ -410,9 +361,6 @@ function extractTypeHono(nomTache) {
   if (!nomTache || typeof nomTache !== 'string') return nomTache || 'Autre';
   return nomTache.replace(/_(?:Réseau CAD|Sous-stations|Général|Centrale|Bâtiment|Participations|SIA).*$/, '').trim() || nomTache;
 }
-
-// Détecte si une ligne est un honoraire externe
-// = contient "externe" dans Nom de la tâche OU ressource est un Fournisseur (Nom du Fournisseur rempli)
 function isExternal(r) {
   const tache = (r['Nom de la tâche'] || '').toLowerCase();
   const fourn = r['Nom du Fournisseur'] || '';
@@ -422,55 +370,53 @@ function isExternal(r) {
 function processImputations() {
   const isHono = r => r['Nom de la tâche'] && r['Nom de la tâche'].toLowerCase().includes('honoraires');
 
-  const honoBR   = prevRows.filter(r=>isHono(r)&&r['Modèle de prévision']==='Budget_Rev').reduce((a,r)=>a+toNum(r['Montant total du coût']),0);
-  const honoAT   = prevRows.filter(r=>isHono(r)&&r['Modèle de prévision']==='AT').reduce((a,r)=>a+toNum(r['Montant total du coût']),0);
-  const honoR    = realRows.filter(isHono).reduce((a,r)=>a+toNum(r['Montant total du coût']),0);
-  const reste    = honoAT - honoR;
-  kpiHono.style.display='grid';
-  kpiHono.innerHTML=`
+  const honoBR = prevRows.filter(r=>isHono(r)&&r['Modèle de prévision']==='Budget_Rev').reduce((a,r)=>a+toNum(r['Montant total du coût']),0);
+  const honoAT = prevRows.filter(r=>isHono(r)&&r['Modèle de prévision']==='AT').reduce((a,r)=>a+toNum(r['Montant total du coût']),0);
+  const honoR  = realRows.filter(isHono).reduce((a,r)=>a+toNum(r['Montant total du coût']),0);
+  const reste  = honoAT - honoR;
+  kpiHono.style.display = 'grid';
+  kpiHono.innerHTML = `
     <div class="kpi-card"><div class="kpi-label">Honoraires BR</div><div class="kpi-value">${toCHF(honoBR)}</div><div class="kpi-unit">CHF</div></div>
     <div class="kpi-card"><div class="kpi-label">Honoraires AT</div><div class="kpi-value">${toCHF(honoAT)}</div><div class="kpi-unit">CHF</div></div>
     <div class="kpi-card"><div class="kpi-label">Honoraires Réels</div><div class="kpi-value">${toCHF(honoR)}</div><div class="kpi-unit">CHF</div></div>
     <div class="kpi-card"><div class="kpi-label">Reste à imputer (AT)</div><div class="kpi-value ${reste>=0?'positive':'negative'}">${toCHF(reste)}</div><div class="kpi-unit">CHF</div></div>
   `;
 
-  // Graphe
-  const typesBR={},typesAT={},typesR={};
-  prevRows.forEach(r=>{
+  const typesBR={}, typesAT={}, typesR={};
+  prevRows.forEach(r => {
     if(!isHono(r)) return;
-    const t=extractTypeHono(r['Nom de la tâche']);
-    const v=toNum(r['Montant total du coût']);
+    const t=extractTypeHono(r['Nom de la tâche']), v=toNum(r['Montant total du coût']);
     if(r['Modèle de prévision']==='Budget_Rev') typesBR[t]=(typesBR[t]||0)+v;
     if(r['Modèle de prévision']==='AT')         typesAT[t]=(typesAT[t]||0)+v;
   });
-  realRows.forEach(r=>{
+  realRows.forEach(r => {
     if(!isHono(r)) return;
     const t=extractTypeHono(r['Nom de la tâche']);
     typesR[t]=(typesR[t]||0)+toNum(r['Montant total du coût']);
   });
-  const allTypes=[...new Set([...Object.keys(typesBR),...Object.keys(typesAT),...Object.keys(typesR)])];
+  const allTypes = [...new Set([...Object.keys(typesBR),...Object.keys(typesAT),...Object.keys(typesR)])];
   if(chartHonoMetier) chartHonoMetier.destroy();
-  chartHonoMetier=new Chart(document.getElementById('chartHonoMetier').getContext('2d'),{
+  chartHonoMetier = new Chart(document.getElementById('chartHonoMetier').getContext('2d'), {
     type:'bar',
-    data:{labels:allTypes,datasets:[
-      {label:'Budget Révisé',data:allTypes.map(t=>typesBR[t]||0),backgroundColor:GE_ORANGE},
-      {label:'AT',data:allTypes.map(t=>typesAT[t]||0),backgroundColor:GE_BLUE2},
-      {label:'Réel',data:allTypes.map(t=>typesR[t]||0),backgroundColor:GE_RED}
+    data:{ labels:allTypes, datasets:[
+      {label:'Budget Révisé', data:allTypes.map(t=>typesBR[t]||0), backgroundColor:GE_ORANGE},
+      {label:'AT',             data:allTypes.map(t=>typesAT[t]||0), backgroundColor:GE_BLUE2},
+      {label:'Réel',           data:allTypes.map(t=>typesR[t]||0),  backgroundColor:GE_RED}
     ]},
-    options:{indexAxis:'y',responsive:true,maintainAspectRatio:false,
-      plugins:{legend:{position:'top'},tooltip:{callbacks:{label:ctx=>`${ctx.dataset.label}: ${toCHF(ctx.parsed.x)} CHF`}}},
+    options:{ indexAxis:'y', responsive:true, maintainAspectRatio:false,
+      plugins:{legend:{position:'top'}, tooltip:{callbacks:{label:ctx=>`${ctx.dataset.label}: ${toCHF(ctx.parsed.x)} CHF`}}},
       scales:{x:{ticks:{callback:v=>toCHF(v)}}}
     }
   });
 
-  // ---- Tableau ressources : honoraires int/ext séparés ----
+  // Tableau ressources
   const buildMap = rows => {
     const m = {};
     rows.forEach(r => {
       if(!isHono(r)) return;
       const ress = r['Ressource.Nom de la ressource'] || (r['Nom du Fournisseur']?`Fourn.: ${r['Nom du Fournisseur']}`:'Non spécifié');
-      const type = extractTypeHono(r['Nom de la tâche'] || '');
-      const proj = getPN(r['ID Projet'] || '');
+      const type = extractTypeHono(r['Nom de la tâche']||'');
+      const proj = getPN(r['ID Projet']||'');
       const ext  = isExternal(r);
       const key  = `${ext?'EXT':'INT'}||${ress}||${type}||${proj}`;
       if(!m[key]) m[key]={ress,type,proj,ext,total:0};
@@ -478,48 +424,37 @@ function processImputations() {
     });
     return Object.values(m).filter(r=>r.total!==0).sort((a,b)=>b.total-a.total);
   };
-
   const allRows = buildMap(realRows);
-  const extRows = allRows.filter(r=>r.ext);
-  const intRows = allRows.filter(r=>!r.ext);
-  const totExt  = extRows.reduce((a,r)=>a+r.total,0);
-  const totInt  = intRows.reduce((a,r)=>a+r.total,0);
-  const totAll  = totExt + totInt;
-
+  const extRows = allRows.filter(r=>r.ext), intRows = allRows.filter(r=>!r.ext);
+  const totExt  = extRows.reduce((a,r)=>a+r.total,0), totInt = intRows.reduce((a,r)=>a+r.total,0);
+  const totAll  = totExt+totInt;
   const makeRow = (r,cls='') => `<tr class="${cls}"><td>${r.ress}</td><td>${r.type}</td><td>${r.proj}</td><td class="${r.total<0?'negative':''}">${toCHF(r.total)}</td></tr>`;
-  const sepRow  = (label,val,cls) => `<tr class="separator-row ${cls}"><td colspan="3"><strong>${label}</strong></td><td><strong>${toCHF(val)}</strong></td></tr>`;
+  const sepRow  = (label,val,cls) => `<tr class="${cls}"><td colspan="3"><strong>${label}</strong></td><td><strong>${toCHF(val)}</strong></td></tr>`;
 
-  tableRess.innerHTML=`<thead><tr><th>Ressource</th><th>Type d'Honoraires</th><th>Projet</th><th>Total Réel (CHF)</th></tr></thead><tbody></tbody><tfoot></tfoot>`;
-  const tb=tableRess.querySelector('tbody');
-  const tf=tableRess.querySelector('tfoot');
-
-  // Section internes
+  tableRess.innerHTML = `<thead><tr><th>Ressource</th><th>Type d'Honoraires</th><th>Projet</th><th>Total Réel (CHF)</th></tr></thead><tbody></tbody><tfoot></tfoot>`;
+  const tb=tableRess.querySelector('tbody'), tf=tableRess.querySelector('tfoot');
   tb.insertAdjacentHTML('beforeend',`<tr class="section-header-int"><td colspan="4">🔵 Honoraires Internes</td></tr>`);
   intRows.forEach(r=>tb.insertAdjacentHTML('beforeend',makeRow(r,'row-int')));
   tb.insertAdjacentHTML('beforeend',sepRow('Sous-total Internes',totInt,'subtotal-int'));
-
-  // Section externes
   tb.insertAdjacentHTML('beforeend',`<tr class="section-header-ext"><td colspan="4">🟠 Honoraires Externes</td></tr>`);
   extRows.forEach(r=>tb.insertAdjacentHTML('beforeend',makeRow(r,'row-ext')));
   tb.insertAdjacentHTML('beforeend',sepRow('Sous-total Externes',totExt,'subtotal-ext'));
-
-  tf.innerHTML=`<tr><td colspan="3"><strong>TOTAL GÉNÉRAL</strong></td><td><strong>${toCHF(totAll)}</strong></td></tr>`;
+  tf.innerHTML = `<tr><td colspan="3"><strong>TOTAL GÉNÉRAL</strong></td><td><strong>${toCHF(totAll)}</strong></td></tr>`;
 }
 
 // ============================================================
 // PARTIE 3 — PLANNING
 // ============================================================
 function processPlanning() {
-  const plan={};
-  PROJECT_ORDER.forEach(id=>{
-    const getR=mode=>{
-      const rows=prevRows.filter(r=>r['ID projet']===id&&r['Modèle de prévision']===mode);
-      const dates=rows.flatMap(r=>[toDate(r['Date de début']),toDate(r['Date de fin'])]).filter(Boolean);
-      return dates.length?{s:new Date(Math.min(...dates)),e:new Date(Math.max(...dates))}:{s:null,e:null};
+  const plan = {};
+  PROJECT_ORDER.forEach(id => {
+    const getR = mode => {
+      const rows  = prevRows.filter(r=>r['ID projet']===id&&r['Modèle de prévision']===mode);
+      const dates = rows.flatMap(r=>[toDate(r['Date de début']),toDate(r['Date de fin'])]).filter(Boolean);
+      return dates.length ? {s:new Date(Math.min(...dates)),e:new Date(Math.max(...dates))} : {s:null,e:null};
     };
-    const br=getR('Budget_Rev'),at=getR('AT');
-    const man=manualPlanningDates[id]||{};
-    let rS=man.start||null,rE=man.end||null;
+    const br=getR('Budget_Rev'), at=getR('AT'), man=manualPlanningDates[id]||{};
+    let rS=man.start||null, rE=man.end||null;
     if(!rS||!rE){
       const rd=realRows.filter(r=>r['ID Projet']===id).map(r=>toDate(r['Date du projet'])).filter(Boolean);
       if(rd.length){if(!rS)rS=new Date(Math.min(...rd));if(!rE)rE=new Date(Math.max(...rd));}
@@ -536,8 +471,7 @@ function buildTablePlanning(plan) {
   const disp=d=>d&&!isNaN(d)?d.toLocaleDateString('fr-CH'):'—';
   const tb=tablePlan.querySelector('tbody');
   PROJECT_ORDER.forEach(id=>{
-    const p=plan[id];
-    const ecart=p.atE&&p.rE?Math.round((p.rE-p.atE)/86400000):null;
+    const p=plan[id], ecart=p.atE&&p.rE?Math.round((p.rE-p.atE)/86400000):null;
     let stat='prevu',sLab='Prévu';
     if(p.rS&&!p.rE){stat='en-cours';sLab='En cours';}
     else if(p.rE){stat=ecart>0?'retard':'termine';sLab=ecart>0?'Retard':'Terminé';}
@@ -554,251 +488,362 @@ function buildTablePlanning(plan) {
   });
 }
 
-// ---- GANTT amélioré ----
+// ============================================================
+// GANTT  v4.1  —  Fix: axe Y catégorique avec labels réels
+// ============================================================
 function drawGantt(plan) {
-  const allD=[];
-  PROJECT_ORDER.forEach(id=>{
+  const allD = [];
+  PROJECT_ORDER.forEach(id => {
     const p=plan[id];
     [p.brS,p.brE,p.atS,p.atE,p.rS,p.rE].forEach(d=>{if(d&&!isNaN(d))allD.push(d);});
   });
   if(!allD.length) return;
 
-  const minD  = new Date(Math.min(...allD));
-  const maxD  = new Date(Math.max(...allD));
-  const span  = Math.round((maxD-minD)/86400000);
-  const toDay = d=>d&&!isNaN(d)?Math.round((d-minD)/86400000):null;
+  const minD = new Date(Math.min(...allD));
+  const maxD = new Date(Math.max(...allD));
+  const span = Math.round((maxD-minD)/86400000)+30; // +30j de marge
+  const toDay = d => d&&!isNaN(d) ? Math.round((d-minD)/86400000) : null;
 
-  const datasets=[];
-  // Hauteur des barres : on utilise barPercentage/categoryPercentage
-  // Chaque projet occupe 3 indices Y consécutifs (BR, AT, Réel)
-  PROJECT_ORDER.forEach((id,idx)=>{
-    const p=plan[id];
-    const y0=idx*3;
-    const pushBar=(label,s,e,color,y)=>{
-      if(s&&e&&!isNaN(s)&&!isNaN(e)){
-        datasets.push({
-          label,
-          data:[{x:[toDay(s),toDay(e)],y}],
-          backgroundColor:color,
-          borderColor:color,
-          borderWidth:1,
-          borderSkipped:false,
-          borderRadius:3
-        });
-      }
-    };
-    pushBar(`${p.name} — Budget Révisé`,p.brS,p.brE,GE_ORANGE,y0);
-    pushBar(`${p.name} — AT`,           p.atS,p.atE,GE_BLUE2, y0+1);
-    pushBar(`${p.name} — Réel`,         p.rS, p.rE, GE_RED,   y0+2);
-  });
-
-  const nRows   = PROJECT_ORDER.length*3;
-  // Labels Y détaillés
+  // ---- Construction des labels Y (axe catégorique) ----
+  // Chaque entrée = une ligne. On définit un tableau de labels ET un dataset
+  // dont le point y est l'INDEX dans ce tableau.
   const yLabels = [];
-  PROJECT_ORDER.forEach(id=>{
-    const n=getPN(id);
-    yLabels.push(`${n}  BR`,`${n}  AT`,`${n}  Réel`);
+  const ySepIdx = new Set(); // indices où tirer un trait de séparation
+
+  PROJECT_ORDER.forEach((id, projIdx) => {
+    if(projIdx > 0) ySepIdx.add(yLabels.length);
+    const n = getPN(id);
+    yLabels.push(`${n}  \u25ba BR`);
+    yLabels.push(`${n}  \u25cf AT`);
+    yLabels.push(`${n}  \u25a0 Réel`);
   });
 
-  // Calcul du nombre de ticks : un tous les 30 jours environ
-  const tickStep = Math.max(30, Math.round(span/14));
+  const nRows = yLabels.length; // = PROJECT_ORDER.length * 3
+
+  // ---- Datasets ----
+  const datasets = [];
+  const pushBar = (label, s, e, color, yIdx) => {
+    if(!s||!e||isNaN(s)||isNaN(e)) return;
+    datasets.push({
+      label,
+      data: [{ x: [toDay(s), toDay(e)], y: yIdx }],
+      backgroundColor: color+'cc',  // légère transparence
+      borderColor: color,
+      borderWidth: 1.5,
+      borderSkipped: false,
+      borderRadius: 4
+    });
+  };
+
+  PROJECT_ORDER.forEach((id, idx) => {
+    const p = plan[id], base = idx*3;
+    pushBar(`${p.name} — Budget Révisé`, p.brS, p.brE, GE_ORANGE, base);
+    pushBar(`${p.name} — AT`,              p.atS, p.atE, GE_BLUE2,  base+1);
+    pushBar(`${p.name} — Réel`,            p.rS,  p.rE,  GE_RED,    base+2);
+  });
+
+  if(datasets.length === 0) return; // rien à afficher
+
+  // ---- Tick step (dates lisibles) ----
+  const tickStep = Math.max(30, Math.round(span/12));
 
   if(chartGantt) chartGantt.destroy();
-  chartGantt=new Chart(document.getElementById('chartGantt').getContext('2d'),{
-    type:'bar',
-    data:{datasets},
-    options:{
-      indexAxis:'y',
-      responsive:true,
-      maintainAspectRatio:false,
-      plugins:{
-        legend:{display:false},
-        tooltip:{
-          callbacks:{
-            title:ctx=>ctx[0].dataset.label,
-            label:ctx=>{
-              const[d0,d1]=ctx.parsed.x;
-              const sD=new Date(minD.getTime()+d0*86400000);
-              const eD=new Date(minD.getTime()+d1*86400000);
-              const dur=Math.round((eD-sD)/86400000);
-              return [`Début : ${sD.toLocaleDateString('fr-CH')}`,`Fin   : ${eD.toLocaleDateString('fr-CH')}`,`Durée : ${dur} jours`];
+
+  chartGantt = new Chart(document.getElementById('chartGantt').getContext('2d'), {
+    type: 'bar',
+    data: { labels: yLabels, datasets },
+    options: {
+      indexAxis: 'y',
+      responsive: true,
+      maintainAspectRatio: false,
+      plugins: {
+        legend: { display: false },
+        tooltip: {
+          callbacks: {
+            title: ctx => ctx[0].dataset.label,
+            label: ctx => {
+              const [d0,d1] = ctx.parsed.x;
+              const sD = new Date(minD.getTime()+d0*86400000);
+              const eD = new Date(minD.getTime()+d1*86400000);
+              const dur = Math.round((eD-sD)/86400000);
+              return [
+                `Début : ${sD.toLocaleDateString('fr-CH')}`,
+                `Fin   : ${eD.toLocaleDateString('fr-CH')}`,
+                `Durée : ${dur} jours`
+              ];
             }
           }
         }
       },
-      scales:{
-        x:{
-          type:'linear',
-          min:0,
-          max:span,
-          title:{display:true,text:'Timeline'},
-          grid:{color:'rgba(0,0,0,0.06)'},
-          ticks:{
-            stepSize:tickStep,
-            callback:value=>{
-              const d=new Date(minD.getTime()+value*86400000);
+      scales: {
+        x: {
+          type: 'linear',
+          min: 0,
+          max: span,
+          title: { display: true, text: 'Timeline' },
+          grid: { color: 'rgba(0,0,0,0.06)' },
+          ticks: {
+            stepSize: tickStep,
+            callback: value => {
+              const d = new Date(minD.getTime()+value*86400000);
               return d.toLocaleDateString('fr-CH',{month:'short',year:'2-digit'});
             }
           }
         },
-        y:{
-          type:'linear',
-          min:-0.5,
-          max:nRows-0.5,
-          reverse:false,
-          grid:{
-            color:ctx=>{
-              // trait de séparation entre projets
-              const v=ctx.tick.value;
-              return Number.isInteger(v/3)&&v%3===0?'rgba(22,58,95,0.2)':'rgba(0,0,0,0.04)';
-            }
-          },
-          ticks:{
-            stepSize:1,
-            font:ctx=>{
-              // gras pour la ligne BR (mod 3 === 0)
-              return ctx.tick.value%3===0?{weight:'bold',size:11}:{size:10};
+        y: {
+          // Axe catégorique : Chart.js mappe labels[0..n-1] automatiquement
+          type: 'category',
+          labels: yLabels,
+          offset: true,
+          grid: {
+            color: ctx => {
+              // Séparateur de projet (entre les groupes BR/AT/Réel)
+              const idx = ctx.index;
+              return (idx>0 && idx%3===0) ? 'rgba(22,58,95,0.25)' : 'rgba(0,0,0,0.04)';
             },
-            callback:value=>yLabels[value]||''
+            lineWidth: ctx => (ctx.index>0 && ctx.index%3===0) ? 2 : 1
+          },
+          ticks: {
+            font: ctx => {
+              const i = yLabels.indexOf(ctx.tick.label);
+              return (i>=0 && i%3===0) ? {weight:'bold',size:11} : {size:10};
+            },
+            color: ctx => {
+              const i = yLabels.indexOf(ctx.tick.label);
+              return (i>=0 && i%3===0) ? '#163a5f' : '#5a7a9a';
+            }
           }
         }
       },
-      // Bar thickness relative
-      datasets:{ bar:{ barPercentage:0.7, categoryPercentage:0.9 } }
+      barPercentage: 0.55,
+      categoryPercentage: 0.85
     }
   });
 }
 
 // ============================================================
-// EXPORTS INDIVIDUELS
+// EXPORTS
 // ============================================================
-function exportChartPNG(canvasId,filename){
-  const canvas=document.getElementById(canvasId);
+function exportChartPNG(canvasId, filename) {
+  const canvas = document.getElementById(canvasId);
   if(!canvas) return;
-  const a=document.createElement('a');
-  a.download=filename+'.png';
-  a.href=canvas.toDataURL('image/png',1);
-  a.click();
+  const a = document.createElement('a');
+  a.download = filename+'.png'; a.href = canvas.toDataURL('image/png',1); a.click();
 }
-window.exportChartPNG=exportChartPNG;
+window.exportChartPNG = exportChartPNG;
 
-async function exportTablePNG(cardId,filename){
-  const el=document.getElementById(cardId);
+async function exportTablePNG(cardId, filename) {
+  const el = document.getElementById(cardId);
   if(!el) return;
-  const canvas=await html2canvas(el,{scale:2,backgroundColor:'#ffffff',logging:false});
+  const canvas = await html2canvas(el,{scale:2,backgroundColor:'#ffffff',logging:false});
   canvas.toBlob(blob=>{
     const url=URL.createObjectURL(blob);
-    const a=document.createElement('a');
-    a.download=filename+'.png';
-    a.href=url;
-    a.click();
+    const a=document.createElement('a'); a.download=filename+'.png'; a.href=url; a.click();
     URL.revokeObjectURL(url);
   });
 }
-window.exportTablePNG=exportTablePNG;
+window.exportTablePNG = exportTablePNG;
 
-function exportTableXLSX(tableId,sheetName){
-  const el=document.getElementById(tableId);
+function exportTableXLSX(tableId, sheetName) {
+  const el = document.getElementById(tableId);
   if(!el) return;
-  const wb=XLSX.utils.book_new();
-  XLSX.utils.book_append_sheet(wb,XLSX.utils.table_to_sheet(el),sheetName.substring(0,31));
-  XLSX.writeFile(wb,sheetName+'.xlsx');
+  const wb = XLSX.utils.book_new();
+  XLSX.utils.book_append_sheet(wb, XLSX.utils.table_to_sheet(el), sheetName.substring(0,31));
+  XLSX.writeFile(wb, sheetName+'.xlsx');
 }
-window.exportTableXLSX=exportTableXLSX;
+window.exportTableXLSX = exportTableXLSX;
 
 // ============================================================
-// PDF RAPPORT COMPLET — toutes les sections visibles
+// PDF  v4.1  —  Landscape A4, 2 sections par page, design soigné
 // ============================================================
 async function generatePDF() {
   const { jsPDF } = window.jspdf;
   const today = new Date();
-  const fname = `${today.getFullYear()}${String(today.getMonth()+1).padStart(2,'0')}${String(today.getDate()).padStart(2,'0')}_Etat_de_Projet.pdf`;
+  const dd    = String(today.getDate()).padStart(2,'0');
+  const mm    = String(today.getMonth()+1).padStart(2,'0');
+  const yyyy  = today.getFullYear();
+  const fname = `${yyyy}${mm}${dd}_Etat_de_Projet.pdf`;
+  const dateStr = today.toLocaleDateString('fr-CH',{day:'2-digit',month:'long',year:'numeric'});
 
-  // On va générer une capture par section, en portrait A4
-  const pdf = new jsPDF({ orientation:'portrait', unit:'mm', format:'a4' });
-  const W   = pdf.internal.pageSize.getWidth();   // 210mm
-  const H   = pdf.internal.pageSize.getHeight();  // 297mm
+  // Landscape A4 : 297 x 210 mm
+  const pdf = new jsPDF({ orientation:'landscape', unit:'mm', format:'a4' });
+  const W   = 297, H = 210;
+  const PAD = 10, HDR = 18, FTR = 8;
+  const CONTENT_H = H - HDR - FTR - PAD; // hauteur utile par page
+  const CONTENT_W = W - 2*PAD;
 
-  // ---- Page de garde ----
+  // -------- Helpers --------
+  function drawHeader(title, pageLabel) {
+    // Bande bleue
+    pdf.setFillColor(22,58,95);
+    pdf.rect(0,0,W,HDR,'F');
+    // Trait orange en bas du header
+    pdf.setFillColor(232,135,58);
+    pdf.rect(0,HDR-1.5,W,1.5,'F');
+    pdf.setTextColor(255,255,255);
+    pdf.setFontSize(10); pdf.setFont('helvetica','bold');
+    pdf.text(title, PAD, 11.5);
+    pdf.setFontSize(8); pdf.setFont('helvetica','normal');
+    pdf.text(`${fname.replace('.pdf','')}   |   ${pageLabel}`, W-PAD, 11.5, {align:'right'});
+  }
+
+  function drawFooter(page, total) {
+    pdf.setFillColor(240,244,249);
+    pdf.rect(0, H-FTR, W, FTR, 'F');
+    pdf.setTextColor(120,140,160);
+    pdf.setFontSize(7.5); pdf.setFont('helvetica','normal');
+    pdf.text('Groupe E Celsius — Dashboard Projets CAD — Confidentiel', PAD, H-2);
+    pdf.text(`Page ${page} / ${total}`, W-PAD, H-2, {align:'right'});
+  }
+
+  // -------- Page de garde --------
   pdf.setFillColor(22,58,95);
   pdf.rect(0,0,W,H,'F');
-  pdf.setTextColor(255,255,255);
-  pdf.setFontSize(28); pdf.setFont('helvetica','bold');
-  pdf.text('Dashboard Projets CAD',W/2,100,{align:'center'});
-  pdf.setFontSize(18); pdf.setFont('helvetica','normal');
-  pdf.text('Groupe E Celsius',W/2,118,{align:'center'});
-  pdf.setFontSize(14);
-  pdf.text('\u00c9tat de Projet — SIA 5 — Réalisation',W/2,132,{align:'center'});
-  pdf.setFontSize(11);
-  pdf.text(`Généré le ${today.toLocaleDateString('fr-CH',{day:'2-digit',month:'long',year:'numeric'})}`,W/2,152,{align:'center'});
+  // Bande décorative orange verticale gauche
+  pdf.setFillColor(232,135,58);
+  pdf.rect(0,0,8,H,'F');
+  // Bloc blanc centré
+  pdf.setFillColor(255,255,255);
+  pdf.roundedRect(30, 40, W-60, 130, 6, 6, 'F');
+  // Logo texte
+  pdf.setTextColor(22,58,95);
+  pdf.setFontSize(26); pdf.setFont('helvetica','bold');
+  pdf.text('Dashboard Projets CAD', W/2, 82, {align:'center'});
+  pdf.setFontSize(15); pdf.setFont('helvetica','normal');
+  pdf.text('Groupe E Celsius', W/2, 97, {align:'center'});
+  pdf.setDrawColor(232,135,58); pdf.setLineWidth(0.8);
+  pdf.line(W/2-40, 103, W/2+40, 103);
+  pdf.setFontSize(12); pdf.setTextColor(22,58,95);
+  pdf.text('\u00c9tat de Projet — SIA 5 — Réalisation', W/2, 112, {align:'center'});
+  pdf.setFontSize(10); pdf.setTextColor(90,122,154);
+  pdf.text(`Généré le ${dateStr}`, W/2, 124, {align:'center'});
+  // Nom fichier
+  pdf.setFontSize(9); pdf.setTextColor(180,190,200);
+  pdf.text(fname, W/2, 160, {align:'center'});
 
-  // ---- Sections à capturer dans l'ordre de la page ----
-  // Capturer chaque élément DOM visible du tab actif
+  // -------- Préparation des sections --------
+  // Sections simples : une image par page (pleine largeur)
+  // Sections doubles : 2 images côte à côte (camémberts)
   const sections = [
-    { id:'kpiSection',           title:'Indicateurs Clés de Performance' },
-    { id:'cardCourbesS',         title:'Courbes S — Coûts Cumulés' },
-    { id:'tablePrevCard',        title:'Budget Révisé — Détails Mensuels' },
-    { id:'cardPieBR',            title:'Répartition Budget Révisé' },
-    { id:'cardPieAT',            title:'Répartition Atterrissage (AT)' },
-    { id:'cardBarProjet',        title:'Avancement par Projet' },
-    { id:'tableCmpCard',         title:'Comparatif par Projet' },
-    { id:'kpiSectionHonoraires', title:'KPI Honoraires' },
-    { id:'cardHonoMetier',       title:'Honoraires par Type' },
-    { id:'tableRessCard',        title:'Coûts Réels par Ressource (Honoraires)' },
-    { id:'cardGantt',            title:'Planning Gantt' },
-    { id:'tablePlanCard',        title:'Tableau Planning' }
+    { id:'kpiSection',           title:'Indicateurs Clés de Performance', type:'kpi' },
+    { id:'cardCourbesS',         title:'Courbes S — Coûts Cumulés',       type:'full' },
+    { id:'tablePrevCard',        title:'Budget Révisé — Détails Mensuels', type:'full' },
+    // Camémberts en double
+    { ids:['cardPieBR','cardPieAT'], titles:['Répartition Budget Révisé','Répartition AT'], type:'double' },
+    { id:'cardBarProjet',        title:'Avancement par Projet (BR/AT/Réel)',type:'full' },
+    { id:'tableCmpCard',         title:'Comparatif par Projet',             type:'full' },
+    { id:'kpiSectionHonoraires', title:'KPI Honoraires',                    type:'kpi' },
+    { id:'cardHonoMetier',       title:'Honoraires par Type de Métier',     type:'full' },
+    { id:'tableRessCard',        title:'Coûts Réels par Ressource — Honoraires', type:'full' },
+    { id:'cardGantt',            title:'Planning Gantt',                    type:'full' },
+    { id:'tablePlanCard',        title:'Tableau Consolidé Planning',        type:'full' }
   ];
 
-  for(const sec of sections){
-    const el=document.getElementById(sec.id);
-    if(!el || el.style.display==='none') continue;
+  // Capture tous les canvases
+  async function captureEl(id) {
+    const el = document.getElementById(id);
+    if(!el || el.style.display==='none') return null;
+    try {
+      return await html2canvas(el, { scale:2, backgroundColor:'#ffffff', logging:false, useCORS:true });
+    } catch(e) { console.warn('capture error', id, e); return null; }
+  }
 
-    let canvas;
-    try{
-      canvas=await html2canvas(el,{
-        scale:2,
-        backgroundColor:'#ffffff',
-        logging:false,
-        useCORS:true,
-        allowTaint:true
-      });
-    } catch(e){ console.warn('html2canvas error',sec.id,e); continue; }
+  // Pré-capturer tout
+  const captured = {};
+  for(const sec of sections) {
+    if(sec.type==='double') {
+      for(const id of sec.ids) captured[id] = await captureEl(id);
+    } else {
+      captured[sec.id] = await captureEl(sec.id);
+    }
+  }
 
-    const imgData = canvas.toDataURL('image/jpeg',0.90);
-    const srcW    = canvas.width;
-    const srcH    = canvas.height;
-    const ratio   = srcH/srcW;
-    const maxImgW = W-20;           // 190mm
-    const maxImgH = H-30;           // 267mm (avec bandeau titre de 20mm)
-    let   imgW    = maxImgW;
-    let   imgH    = imgW*ratio;
-    // Si l'image est trop haute, diviser en plusieurs pages
-    const pagesNeeded = Math.ceil(imgH/maxImgH);
+  // Compter les pages réelles
+  let totalPages = 1; // garde
+  for(const sec of sections) {
+    if(sec.type==='double') { totalPages++; continue; }
+    const c = captured[sec.id]; if(!c) continue;
+    const imgH = CONTENT_W * (c.height/c.width);
+    totalPages += Math.ceil(imgH/CONTENT_H);
+  }
 
-    for(let pg=0;pg<pagesNeeded;pg++){
+  // ---- Génération des pages ----
+  let pageNum = 1;
+
+  // Fermer la page de garde (déjà créée)
+  drawFooter(pageNum, totalPages);
+
+  for(const sec of sections) {
+
+    // --- Type DOUBLE (2 camémberts côte à côte) ---
+    if(sec.type === 'double') {
+      const canvases = sec.ids.map(id=>captured[id]).filter(Boolean);
+      if(!canvases.length) continue;
+      pageNum++;
       pdf.addPage();
-      // Bandeau titre
-      pdf.setFillColor(22,58,95);
-      pdf.rect(0,0,W,16,'F');
-      pdf.setTextColor(255,255,255);
-      pdf.setFontSize(10); pdf.setFont('helvetica','bold');
-      pdf.text(sec.title+(pagesNeeded>1?` (${pg+1}/${pagesNeeded})`:'')+' — SIA 5',10,10);
-      pdf.setFontSize(8); pdf.setFont('helvetica','normal');
-      pdf.text(fname.replace('.pdf',''),W-10,10,{align:'right'});
+      drawHeader(sec.titles.join('  /  '), `${pageNum}/${totalPages}`);
+      drawFooter(pageNum, totalPages);
+      const colW = (CONTENT_W-8)/2;
+      const yTop = HDR+PAD;
+      canvases.forEach((c,ci) => {
+        const xOff = PAD + ci*(colW+8);
+        const ratio = c.height/c.width;
+        const iH = Math.min(colW*ratio, CONTENT_H-6);
+        // Fond blanc arrondi
+        pdf.setFillColor(255,255,255);
+        pdf.roundedRect(xOff-2, yTop-2, colW+4, iH+4+10, 3, 3, 'F');
+        pdf.setDrawColor(220,228,240); pdf.setLineWidth(0.4);
+        pdf.roundedRect(xOff-2, yTop-2, colW+4, iH+4+10, 3, 3, 'S');
+        // Titre de la section
+        pdf.setFontSize(9); pdf.setFont('helvetica','bold');
+        pdf.setTextColor(22,58,95);
+        pdf.text(sec.titles[ci]||'', xOff+colW/2, yTop+7, {align:'center'});
+        // Image
+        const imgData = c.toDataURL('image/jpeg',0.92);
+        pdf.addImage(imgData,'JPEG', xOff, yTop+10, colW, iH);
+      });
+      continue;
+    }
 
-      // Crop portion de l'image pour cette page
-      const sliceH     = Math.ceil(srcH/pagesNeeded);
-      const srcYStart  = pg*sliceH;
-      const srcYEnd    = Math.min(srcYStart+sliceH,srcH);
-      const sliceCanvas= document.createElement('canvas');
-      sliceCanvas.width  = srcW;
-      sliceCanvas.height = srcYEnd-srcYStart;
-      sliceCanvas.getContext('2d').drawImage(canvas,0,-srcYStart);
-      const sliceData  = sliceCanvas.toDataURL('image/jpeg',0.90);
-      const sliceRatio = sliceCanvas.height/sliceCanvas.width;
-      const sliceW     = maxImgW;
-      const sliceH2    = sliceW*sliceRatio;
-      pdf.addImage(sliceData,'JPEG',10,18,sliceW,Math.min(sliceH2,maxImgH));
+    // --- Type KPI : on rend les cartes en bande compacte ---
+    if(sec.type === 'kpi') {
+      const c = captured[sec.id]; if(!c) continue;
+      const imgH_mm = CONTENT_W * (c.height/c.width);
+      // KPI est en général court, on le place en haut d'une nouvelle page
+      pageNum++;
+      pdf.addPage();
+      drawHeader(sec.title, `${pageNum}/${totalPages}`);
+      drawFooter(pageNum, totalPages);
+      const iH = Math.min(imgH_mm, CONTENT_H);
+      const imgData = c.toDataURL('image/jpeg',0.93);
+      pdf.addImage(imgData,'JPEG', PAD, HDR+4, CONTENT_W, iH);
+      continue;
+    }
+
+    // --- Type FULL : pleine largeur, pagination si trop long ---
+    const c = captured[sec.id]; if(!c) continue;
+    const srcW = c.width, srcH = c.height;
+    const imgH_mm = CONTENT_W * (srcH/srcW);
+    const pagesNeeded = Math.ceil(imgH_mm / CONTENT_H);
+
+    for(let pg=0; pg<pagesNeeded; pg++) {
+      pageNum++;
+      pdf.addPage();
+      const titleSuffix = pagesNeeded>1 ? ` (${pg+1}/${pagesNeeded})` : '';
+      drawHeader(sec.title+titleSuffix, `${pageNum}/${totalPages}`);
+      drawFooter(pageNum, totalPages);
+
+      // Crop vertical
+      const slicePxH   = Math.ceil(srcH/pagesNeeded);
+      const srcYStart  = pg*slicePxH;
+      const srcYEnd    = Math.min(srcYStart+slicePxH, srcH);
+      const sl = document.createElement('canvas');
+      sl.width  = srcW;
+      sl.height = srcYEnd-srcYStart;
+      sl.getContext('2d').drawImage(c, 0, -srcYStart);
+      const slData  = sl.toDataURL('image/jpeg',0.92);
+      const slH_mm  = CONTENT_W*(sl.height/sl.width);
+      pdf.addImage(slData,'JPEG', PAD, HDR+4, CONTENT_W, Math.min(slH_mm, CONTENT_H));
     }
   }
 
