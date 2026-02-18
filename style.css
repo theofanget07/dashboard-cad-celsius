@@ -365,3 +365,101 @@ input[type="number"] {
   .kpi-section { grid-template-columns: 1fr; }
   .kpi-value { font-size: 1.2rem; }
 }
+/* ============================================================
+   style.css — Ajouts v5.0 (multi-phase)
+   ============================================================ */
+
+/* ===== PDF SELECT ===== */
+.pdf-select {
+  padding: 8px 12px;
+  border: none;
+  border-radius: 8px 0 0 8px;
+  background: rgba(255,255,255,0.15);
+  color: #fff;
+  font-size: 13px;
+  font-weight: 600;
+  cursor: pointer;
+  outline: none;
+}
+.pdf-select option { background: #1e4d8c; color: #fff; }
+
+/* ===== HERO FLEX ===== */
+.hero { position: sticky; top: 0; z-index: 100; }
+.hero-content { max-width: 1400px; margin: 0 auto; display: flex;
+  justify-content: space-between; align-items: center; gap: 16px; flex-wrap: wrap; padding: 20px 32px; }
+.hero-actions { display: flex; align-items: center; gap: 0; flex-shrink: 0; }
+.btn-pdf { border-radius: 0 8px 8px 0 !important; }
+
+/* ===== SECTION TITLE ===== */
+.section-title {
+  background: linear-gradient(135deg, var(--brand), var(--brand2));
+  border-radius: 10px; padding: 12px 20px;
+  margin: 28px 0 16px; border-left: 5px solid var(--warning);
+}
+.section-title h2 { color: #fff; font-size: 14px; font-weight: 700; margin: 0; letter-spacing: 0.5px; }
+
+/* ===== SOUS-ONGLETS SIA 5 ===== */
+.subtabs {
+  display: flex; gap: 4px; padding: 16px 0 0;
+  border-bottom: 2px solid var(--line); margin-bottom: 20px;
+}
+.subtab-btn {
+  padding: 8px 20px; border: none; border-radius: 8px 8px 0 0;
+  background: var(--line); color: var(--muted); font-size: 13px;
+  font-weight: 600; cursor: pointer; transition: all .2s;
+}
+.subtab-btn:hover { background: var(--brand4); color: #fff; }
+.subtab-btn.active { background: var(--brand); color: #fff; }
+.subtab-content { display: none; }
+.subtab-content.active { display: block; }
+
+/* ===== TABLEAU MENSUEL ===== */
+#tableSIA5Monthly .badge { font-size: 10px; padding: 1px 6px; }
+#tableSIA5Monthly td { font-size: 12.5px; }
+
+/* ===== DATE INPUT INLINE PLANNING ===== */
+.plan-input {
+  padding: 4px 6px !important;
+  border: 1.5px solid var(--line) !important;
+  border-radius: 5px !important;
+  font-size: 12px !important;
+  width: 120px !important;
+  transition: border-color .2s, box-shadow .2s;
+}
+.plan-input:focus {
+  outline: none !important;
+  border-color: var(--brand) !important;
+  box-shadow: 0 0 0 3px rgba(46,109,180,0.15);
+}
+.plan-input:hover { border-color: var(--brand3) !important; }
+
+/* ===== RECALC BUTTON ===== */
+#btnRecalcGantt {
+  margin-top: 14px; padding: 9px 20px;
+  background: var(--warning); color: #fff;
+  border: none; border-radius: 8px;
+  font-weight: 700; font-size: 13px; cursor: pointer;
+  transition: all .2s;
+}
+#btnRecalcGantt:hover { background: #d4762f; transform: translateY(-2px); }
+
+/* ===== CAMEMBERT WRAPPER ===== */
+.chart-wrapper-small canvas { max-height: 280px; }
+
+/* ===== UPLOAD ZONE AMÉLIORÉE ===== */
+.upload-zone {
+  display: grid;
+  grid-template-columns: 1fr 1fr 1fr;
+  gap: 16px; margin-bottom: 0;
+}
+@media(max-width: 900px) { .upload-zone { grid-template-columns: 1fr 1fr; } }
+@media(max-width: 600px) { .upload-zone { grid-template-columns: 1fr; } }
+
+.upload-card {
+  background: var(--card); border-radius: 12px;
+  padding: 16px 18px; border: 2px dashed var(--line);
+  transition: border-color .2s;
+}
+.upload-card:hover { border-color: var(--brand4); }
+.upload-label { display: block; font-weight: 700; font-size: 13px; color: var(--brand); margin-bottom: 5px; }
+.upload-hint { display: block; font-size: 11px; color: var(--muted); margin-top: 2px; }
