@@ -1,15 +1,17 @@
 /* ============================================================
    Dashboard CAD — Groupe E Celsius
-   script.js v5.0 — 18/02/2026
-   Multi-phase SIA 2/3/4/5 — Corrections complètes
+   script.js v5.1 — 18/02/2026
+   Corrections : Aujourd'hui partout, vue Global/S globale,
+   tableau mensuel corrigé toutes phases, honoraires SIA3 fix,
+   exports Excel/PNG réintégrés
    ============================================================ */
 
 // ============================================================
 // GLOBALS
 // ============================================================
 let prevRows = [], realRows = [];
-const charts = {}; // Stockage centralisé Chart.js : destroy avant recréation
-let manualPlanningDates = {}; // Dates éditées manuellement dans le tableau planning
+const charts = {}; // Stockage centralisé Chart.js
+let manualPlanningDates = {}; // Dates éditées manuellement planning SIA5
 
 // ---- Palette Groupe E ----
 const GE_BLUE   = '#163a5f';
@@ -20,14 +22,14 @@ const GE_ORANGE = '#e8873a';
 const GE_RED    = '#c0392b';
 const GE_GREEN  = '#27ae60';
 
-// Camembert : 12 couleurs distinctes garanties
+// Camembert : 12 couleurs distinctes
 const PIE_COLORS = [
   '#2e6db4','#e8873a','#27ae60','#8e44ad',
   '#c0392b','#16a085','#d4ac0d','#2980b9',
   '#e74c3c','#1abc9c','#f39c12','#7f8c8d'
 ];
 
-// SIA 5 — 6 sous-projets connus
+// SIA 5 — 6 sous-projets
 const PROJECT_NAMES = {
   'CL150096_11_05_01': 'Général - Direction',
   'CL150096_11_05_02': 'Centrale',
@@ -38,9 +40,6 @@ const PROJECT_NAMES = {
 };
 const PROJECT_ORDER = Object.keys(PROJECT_NAMES);
 const getPN = id => PROJECT_NAMES[id] || id;
-
-// Mapping phases
-const PHASE_CODES = { 'SIA2':'02', 'SIA3':'03', 'SIA4':'04', 'SIA5':'05' };
 
 // ============================================================
 // UTILS
@@ -140,10 +139,18 @@ function extractPhase(idProjet) {
   return mapping[code] || null;
 }
 
+// CORRECTION : Détection honoraires renforcée
 function isHonoraires(row) {
   const task = String(row['Nom de la tâche'] || row['Nom de la tache'] || '').toLowerCase();
   const type = String(row['Type de ressource'] || '').toLowerCase();
-  return task.includes('honorai') || task.includes('honor') || type.includes('honorai');
+  const desc = String(row['Description'] || '').toLowerCase();
+  
+  // Mots-clés honoraires
+  const keywords = ['honorai', 'honor', 'études', 'etude', 'ingénieur', 'ingenieur', 
+                    'bureau', 'conseil', 'expert', 'consultant', 'architecture',
+                    'cpt', 'responsable projet', 'chef ee', 'technicien', 'conducteur travaux', 'dessinateur'];
+  
+  return keywords.some(kw => task.includes(kw) || type.includes(kw) || desc.includes(kw));
 }
 
 function isExternal(row) {
@@ -173,24 +180,55 @@ function kpiCard(label, value, unit='CHF', cls='') {
 }
 
 // ============================================================
-// PLUGIN : Ligne "Aujourd'hui"
+// PLUGIN : Ligne "Aujourd'hui" (CORRECTION : actif partout)
 // ============================================================
 const todayLinePlugin = {
   id: 'todayLine',
   afterDatasetsDraw(ch, _args, opts) {
     if (!opts || !opts.label) return;
     const { ctx, chartArea: { top, bottom }, scales: { x } } = ch;
+    if (!x) return; // Pas d'axe x (ex: pie)
     const labels = ch.data.labels;
-    const toT = s => { const [y,m] = s.split('-'); return new Date(+y,+m-1,1).getTime(); };
-    const t = toT(opts.label);
+    if (!labels || !labels.length) return;
+    
+    const toT = s => {
+      const parts = String(s).match(/(\d{4})-(\d{2})/);
+      if (!parts) return 0;
+      return new Date(+parts[1], +parts[2]-1, 1).getTime();
+    };
+    
+    const targetT = toT(opts.label);
     let bi = 0, bd = Infinity;
-    labels.forEach((l,i) => { const d = Math.abs(toT(l)-t); if (d < bd) { bd=d; bi=i; } });
+    labels.forEach((l,i) => {
+      const labelStr = typeof l === 'string' ? l : String(l);
+      // Extraire YYYY-MM depuis "Jan 2025" ou "2025-01"
+      const match = labelStr.match(/(\d{4})/);
+      if (!match) return;
+      const year = match[1];
+      const monthNames = ['jan','fév','fev','mar','avr','mai','juin','juil','août','aout','sep','oct','nov','déc','dec'];
+      let monthIdx = 0;
+      const lowerLabel = labelStr.toLowerCase();
+      monthNames.forEach((mn, idx) => {
+        if (lowerLabel.includes(mn)) monthIdx = idx;
+      });
+      const reconstructed = `${year}-${String(monthIdx+1).padStart(2,'0')}`;
+      const d = Math.abs(toT(reconstructed) - targetT);
+      if (d < bd) { bd = d; bi = i; }
+    });
+    
     const xp = x.getPixelForValue(bi);
     ctx.save();
-    ctx.strokeStyle = GE_RED; ctx.lineWidth = 2; ctx.setLineDash([5,5]);
-    ctx.beginPath(); ctx.moveTo(xp, top); ctx.lineTo(xp, bottom); ctx.stroke();
+    ctx.strokeStyle = GE_RED;
+    ctx.lineWidth = 2;
+    ctx.setLineDash([5,5]);
+    ctx.beginPath();
+    ctx.moveTo(xp, top);
+    ctx.lineTo(xp, bottom);
+    ctx.stroke();
     ctx.setLineDash([]);
-    ctx.fillStyle = GE_RED; ctx.font = 'bold 11px Arial'; ctx.textAlign = 'center';
+    ctx.fillStyle = GE_RED;
+    ctx.font = 'bold 11px Arial';
+    ctx.textAlign = 'center';
     ctx.fillText("Aujourd'hui", xp, top-5);
     ctx.restore();
   }
@@ -247,17 +285,11 @@ document.addEventListener('DOMContentLoaded', () => {
     });
   });
 
-  // Vue
+  // Vue Global/S
   ['viewGlobal','viewSOnly'].forEach(id => {
     document.getElementById(id).addEventListener('change', () => {
       if (prevRows.length && realRows.length) processAll();
     });
-  });
-
-  // Recalc Gantt SIA5 depuis tableau
-  document.getElementById('btnRecalcGantt').addEventListener('click', () => {
-    collectManualDates();
-    processPlanningSIA5();
   });
 
   // PDF
@@ -304,19 +336,6 @@ function filterRealByPhase(code) {
     const parts = id.split('_');
     return parts.length >= 3 && parts[2] === code;
   });
-}
-
-function getTasksFromPhase(pRows) {
-  // Regroupe par ID projet (ou nom de tâche pour SIA 2/3/4)
-  const tasks = {};
-  pRows.forEach(r => {
-    const id = String(r['ID projet'] || r['ID Projet'] || 'Inconnu');
-    const task = getTaskName(r);
-    const key = task; // Pour SIA 2/3/4, on group par tâche
-    if (!tasks[key]) tasks[key] = { id, task: key, rows: [] };
-    tasks[key].rows.push(r);
-  });
-  return Object.values(tasks);
 }
 
 // ============================================================
@@ -379,7 +398,7 @@ function buildSCurves(pRows, rRows) {
   const realCum   = realMonth.map(v => { acc += v; return acc; });
   const realCut   = realCum.map((v,i) => axis[i] > mmToday ? null : v);
 
-  return { axis, series, realMonth, realCum, realCut, model, mmToday };
+  return { axis, series, realMonth, realCum, realCut, model, mmToday, initCum };
 }
 
 function drawSCurveChart(canvasId, data, title) {
@@ -387,7 +406,6 @@ function drawSCurveChart(canvasId, data, title) {
   if (!data) return;
   const { axis, series, realCut, mmToday } = data;
 
-  // Masquer datasets à 0
   const datasets = [];
   if (series['Budget_Rev'] && series['Budget_Rev'].some(v => v !== null && v > 0)) {
     datasets.push({
@@ -443,6 +461,65 @@ function drawSCurveChart(canvasId, data, title) {
 }
 
 // ============================================================
+// TABLEAU MENSUEL (CORRECTION : logique réécrite)
+// ============================================================
+function renderMonthlyTable(tableId, sData) {
+  if (!sData) return;
+  const { axis, series, realMonth, realCum, mmToday, initCum } = sData;
+  const tbl = document.getElementById(tableId);
+  if (!tbl) return;
+
+  const brCum  = series['Budget_Rev'] || [];
+  const atCum  = series['AT'] || [];
+
+  // Dériver mensuel depuis cumul
+  const getMonthly = cum => cum.map((v,i) => {
+    if (v === null) return 0;
+    const prev = i > 0 ? (cum[i-1] || 0) : 0;
+    return Math.max(0, v - prev);
+  });
+  const brMonthly = getMonthly(brCum);
+
+  // Cumul réel CORRIGÉ : tenir compte de initCum
+  let cumReel = initCum || 0;
+  const realCumArr = realMonth.map(v => { cumReel += v; return cumReel; });
+
+  let html = `<thead><tr>
+    <th>Mois</th>
+    <th>BR Mensuel (S)</th><th>BR Cumulé</th>
+    <th>Réel Mensuel</th><th>Réel Cumulé</th>
+    <th>Écart Mensuel</th><th>Écart Cumulé</th>
+  </tr></thead><tbody>`;
+
+  axis.forEach((mm, i) => {
+    const brM   = brMonthly[i] || 0;
+    const brC   = brCum[i] || 0;
+    const reelM = realMonth[i] || 0;
+    const reelC = realCumArr[i] || 0;
+    const ecM   = reelM - brM;
+    const ecC   = reelC - brC;
+    const isPast = mm <= mmToday;
+    
+    // Ne pas afficher les mois futurs sans données
+    if (!isPast && brC === 0 && reelM === 0) return;
+    
+    const rowClass = isPast ? '' : 'style="color:#888;font-style:italic;"';
+
+    html += `<tr ${rowClass}>
+      <td><strong>${fmtMonth(mm)}</strong>${mm===mmToday?' <span class="badge en-cours">Aujourd\'hui</span>':''}</td>
+      <td>${brM>0 ? toCHF(brM) : '—'}</td>
+      <td>${brC>0 ? toCHF(brC) : '—'}</td>
+      <td>${isPast ? (reelM>0 ? toCHF(reelM) : '<span style="color:#999">0</span>') : '—'}</td>
+      <td>${isPast && reelC>0 ? toCHF(reelC) : (isPast?'<span style="color:#999">0</span>':'—')}</td>
+      <td class="${isPast && (reelM>0||brM>0) ? (ecM>=0?'negative':'positive') : ''}">${isPast && (reelM>0||brM>0) ? (ecM>=0?'+':'')+toCHF(ecM) : '—'}</td>
+      <td class="${isPast && (reelC>0||brC>0) ? (ecC>=0?'negative':'positive') : ''}">${isPast && (reelC>0||brC>0) ? (ecC>=0?'+':'')+toCHF(ecC) : '—'}</td>
+    </tr>`;
+  });
+  html += `</tbody>`;
+  tbl.innerHTML = html;
+}
+
+// ============================================================
 // ONGLET RÉCAPITULATIF
 // ============================================================
 function processRecap() {
@@ -452,35 +529,30 @@ function processRecap() {
     { name: 'SIA 4', code: '04', color: GE_BLUE2 },
     { name: 'SIA 5', code: '05', color: GE_BLUE  }
   ];
-  const today = new Date(), mmToday = yyyymm(today);
 
   const summaries = phases.map(ph => {
     const pRows = filterPrevByPhase(ph.code);
     const rRows = filterRealByPhase(ph.code);
-    const budget   = pRows.filter(r => r['Modèle de prévision']==='Budget').reduce((a,r) => a+toNum(r['Montant total du coût']),0);
     const budgetRev= pRows.filter(r => r['Modèle de prévision']==='Budget_Rev').reduce((a,r) => a+toNum(r['Montant total du coût']),0);
     const at       = pRows.filter(r => r['Modèle de prévision']==='AT').reduce((a,r) => a+toNum(r['Montant total du coût']),0);
     const reel     = rRows.reduce((a,r) => a+toNum(r['Montant total du coût']),0);
     const ecartBR  = reel - budgetRev;
     const ecartAT  = reel - at;
-    const pctAT    = at > 0 ? (reel/at*100) : 0;
 
-    // Honoraires
     const honorPRows = pRows.filter(r => isHonoraires(r));
     const honorRRows = rRows.filter(r => isHonoraires(r));
     const honorBR = honorPRows.filter(r => r['Modèle de prévision']==='Budget_Rev').reduce((a,r) => a+toNum(r['Montant total du coût']),0);
     const honorAT = honorPRows.filter(r => r['Modèle de prévision']==='AT').reduce((a,r) => a+toNum(r['Montant total du coût']),0);
     const honorReel = honorRRows.reduce((a,r) => a+toNum(r['Montant total du coût']),0);
 
-    // Planning : min/max dates
     const allDates = [...pRows, ...rRows].flatMap(r => [toDate(r['Date de début']), toDate(r['Date de fin']), getDateReal(r)]).filter(Boolean);
     const planStart = allDates.length ? new Date(Math.min(...allDates)) : null;
     const planEnd   = allDates.length ? new Date(Math.max(...allDates)) : null;
 
-    return { ...ph, budget, budgetRev, at, reel, ecartBR, ecartAT, pctAT, honorBR, honorAT, honorReel, planStart, planEnd };
+    return { ...ph, budgetRev, at, reel, ecartBR, ecartAT, honorBR, honorAT, honorReel, planStart, planEnd };
   });
 
-  // === KPI RÉCAP BUDGET ===
+  // KPI Budget
   const totalBR   = summaries.reduce((a,s) => a+s.budgetRev, 0);
   const totalAT   = summaries.reduce((a,s) => a+s.at, 0);
   const totalReel = summaries.reduce((a,s) => a+s.reel, 0);
@@ -492,61 +564,56 @@ function processRecap() {
     kpiCard('Réel Total', toCHF(totalReel)) +
     kpiCard('Écart vs AT', (totalEcart>=0?'+':'')+toCHF(totalEcart), 'CHF', totalEcart>=0?'negative':'positive');
 
-  // === GRAPHIQUE RECAP BUDGET ===
+  // Graphique Budget
   destroyChart('recapBudgetChart');
   const rcCtx = document.getElementById('recapBudgetChart');
   if (rcCtx) {
     const nonZero = summaries.filter(s => s.budgetRev > 0 || s.at > 0 || s.reel > 0);
-    charts['recapBudgetChart'] = new Chart(rcCtx, {
-      type: 'bar',
-      data: {
-        labels: nonZero.map(s => s.name),
-        datasets: [
-          { label: 'Budget Révisé', data: nonZero.map(s=>s.budgetRev), backgroundColor: GE_ORANGE+'cc' },
-          { label: 'AT',            data: nonZero.map(s=>s.at),        backgroundColor: GE_BLUE2+'cc' },
-          { label: 'Réel',          data: nonZero.map(s=>s.reel),      backgroundColor: GE_RED+'cc' }
-        ]
-      },
-      options: {
-        responsive: true, maintainAspectRatio: false,
-        plugins: { legend: { position:'top' } },
-        scales: { y: { ticks: { callback: v => toCHF(v) } } }
-      }
-    });
-    rcCtx.style.height = '300px';
-    rcCtx.parentElement.style.height = '320px';
+    if (nonZero.length) {
+      charts['recapBudgetChart'] = new Chart(rcCtx, {
+        type: 'bar',
+        data: {
+          labels: nonZero.map(s => s.name),
+          datasets: [
+            { label: 'Budget Révisé', data: nonZero.map(s=>s.budgetRev), backgroundColor: GE_ORANGE+'cc' },
+            { label: 'AT',            data: nonZero.map(s=>s.at),        backgroundColor: GE_BLUE2+'cc' },
+            { label: 'Réel',          data: nonZero.map(s=>s.reel),      backgroundColor: GE_RED+'cc' }
+          ]
+        },
+        options: {
+          responsive: true, maintainAspectRatio: false,
+          plugins: { legend: { position:'top' } },
+          scales: { y: { ticks: { callback: v => toCHF(v) } } }
+        }
+      });
+    }
   }
 
-  // === TABLEAU RECAP BUDGET ===
+  // Tableau Budget
   const tbl = document.getElementById('recapBudgetTable');
   if (tbl) {
-    let html = `<thead><tr>
-      <th>Phase</th><th>Budget</th><th>Budget Révisé</th><th>AT</th><th>Réel</th>
-      <th>Écart BR</th><th>Écart AT</th><th>% AT</th>
-    </tr></thead><tbody>`;
+    let html = `<thead><tr><th>Phase</th><th>Budget Révisé</th><th>AT</th><th>Réel</th><th>Écart BR</th><th>Écart AT</th><th>% AT</th></tr></thead><tbody>`;
     summaries.forEach(s => {
+      const pAT = s.at>0 ? (s.reel/s.at*100).toFixed(1) : 0;
       html += `<tr>
         <td><strong>${s.name}</strong></td>
-        <td>${toCHF(s.budget)}</td><td>${toCHF(s.budgetRev)}</td><td>${toCHF(s.at)}</td><td>${toCHF(s.reel)}</td>
+        <td>${toCHF(s.budgetRev)}</td><td>${toCHF(s.at)}</td><td>${toCHF(s.reel)}</td>
         <td class="${s.ecartBR>=0?'negative':'positive'}">${(s.ecartBR>=0?'+':'')+toCHF(s.ecartBR)}</td>
         <td class="${s.ecartAT>=0?'negative':'positive'}">${(s.ecartAT>=0?'+':'')+toCHF(s.ecartAT)}</td>
-        <td>${s.pctAT.toFixed(1)}%</td>
+        <td>${pAT}%</td>
       </tr>`;
     });
-    const totEcartBR = summaries.reduce((a,s)=>a+s.ecartBR,0);
-    const totEcartAT = summaries.reduce((a,s)=>a+s.ecartAT,0);
     html += `</tbody><tfoot><tr>
       <td>TOTAL</td>
-      <td>${toCHF(summaries.reduce((a,s)=>a+s.budget,0))}</td>
       <td>${toCHF(totalBR)}</td><td>${toCHF(totalAT)}</td><td>${toCHF(totalReel)}</td>
-      <td class="${totEcartBR>=0?'negative':'positive'}">${(totEcartBR>=0?'+':'')+toCHF(totEcartBR)}</td>
-      <td class="${totEcartAT>=0?'negative':'positive'}">${(totEcartAT>=0?'+':'')+toCHF(totEcartAT)}</td>
+      <td class="${(totalReel-totalBR)>=0?'negative':'positive'}">${((totalReel-totalBR)>=0?'+':'')+toCHF(totalReel-totalBR)}</td>
+      <td class="${totalEcart>=0?'negative':'positive'}">${(totalEcart>=0?'+':'')+toCHF(totalEcart)}</td>
       <td>${totalAT>0?(totalReel/totalAT*100).toFixed(1):0}%</td>
     </tr></tfoot>`;
     tbl.innerHTML = html;
   }
 
-  // === KPI RECAP IMPUTATIONS ===
+  // KPI Imputations
   const totHonorBR   = summaries.reduce((a,s)=>a+s.honorBR,0);
   const totHonorAT   = summaries.reduce((a,s)=>a+s.honorAT,0);
   const totHonorReel = summaries.reduce((a,s)=>a+s.honorReel,0);
@@ -557,32 +624,32 @@ function processRecap() {
     kpiCard('Honoraires Réel', toCHF(totHonorReel)) +
     kpiCard('Écart Honor. AT', ((totHonorReel-totHonorAT)>=0?'+':'')+toCHF(totHonorReel-totHonorAT), 'CHF', (totHonorReel-totHonorAT)>=0?'negative':'positive');
 
-  // === GRAPHIQUE RECAP IMPUTATIONS ===
+  // Graphique Imputations
   destroyChart('recapImputChart');
   const riCtx = document.getElementById('recapImputChart');
   if (riCtx) {
     const nonZeroH = summaries.filter(s => s.honorBR>0 || s.honorAT>0 || s.honorReel>0);
-    charts['recapImputChart'] = new Chart(riCtx, {
-      type: 'bar',
-      data: {
-        labels: nonZeroH.map(s=>s.name),
-        datasets: [
-          { label: 'Honoraires BR', data: nonZeroH.map(s=>s.honorBR),   backgroundColor: GE_ORANGE+'cc' },
-          { label: 'Honoraires AT', data: nonZeroH.map(s=>s.honorAT),   backgroundColor: GE_BLUE2+'cc' },
-          { label: 'Réel',          data: nonZeroH.map(s=>s.honorReel), backgroundColor: GE_GREEN+'cc'  }
-        ]
-      },
-      options: {
-        responsive: true, maintainAspectRatio: false,
-        plugins: { legend: { position:'top' } },
-        scales: { y: { ticks: { callback: v => toCHF(v) } } }
-      }
-    });
-    riCtx.style.height = '300px';
-    riCtx.parentElement.style.height = '320px';
+    if (nonZeroH.length) {
+      charts['recapImputChart'] = new Chart(riCtx, {
+        type: 'bar',
+        data: {
+          labels: nonZeroH.map(s=>s.name),
+          datasets: [
+            { label: 'Honoraires BR', data: nonZeroH.map(s=>s.honorBR),   backgroundColor: GE_ORANGE+'cc' },
+            { label: 'Honoraires AT', data: nonZeroH.map(s=>s.honorAT),   backgroundColor: GE_BLUE2+'cc' },
+            { label: 'Réel',          data: nonZeroH.map(s=>s.honorReel), backgroundColor: GE_GREEN+'cc'  }
+          ]
+        },
+        options: {
+          responsive: true, maintainAspectRatio: false,
+          plugins: { legend: { position:'top' } },
+          scales: { y: { ticks: { callback: v => toCHF(v) } } }
+        }
+      });
+    }
   }
 
-  // === TABLEAU RECAP IMPUTATIONS ===
+  // Tableau Imputations
   const tblI = document.getElementById('recapImputTable');
   if (tblI) {
     let html = `<thead><tr><th>Phase</th><th>Honoraires BR</th><th>Honoraires AT</th><th>Réel</th><th>Écart AT</th></tr></thead><tbody>`;
@@ -595,7 +662,7 @@ function processRecap() {
     tblI.innerHTML = html;
   }
 
-  // === GANTT GLOBAL ===
+  // Gantt Global
   destroyChart('recapPlanningChart');
   const ganttCtx = document.getElementById('recapPlanningChart');
   if (ganttCtx) {
@@ -616,13 +683,13 @@ function processRecap() {
         data: {
           labels: validPhases.map(s=>s.name),
           datasets: [
-            { label: 'Début', data: bars.map(b=>b.base), backgroundColor: 'transparent', borderWidth: 0 },
-            { label: 'Durée', data: bars.map(b=>b.len), backgroundColor: validPhases.map(s=>s.color+'cc'), borderRadius: 4 }
+            { label:'Début', data: bars.map(b=>b.base), backgroundColor: 'transparent', borderWidth: 0 },
+            { label:'Durée', data: bars.map(b=>b.len), backgroundColor: validPhases.map(s=>s.color+'cc'), borderRadius: 4 }
           ]
         },
         options: {
           indexAxis: 'y', responsive: true, maintainAspectRatio: false,
-          plugins: { legend: { display: false } },
+          plugins: { legend: { display: false }, todayLine: { label: yyyymm(new Date()) } },
           scales: {
             x: { stacked: true, ticks: { callback: v => axis[v] ? fmtMonth(axis[v]) : '' } },
             y: { stacked: true }
@@ -640,21 +707,22 @@ function processRecap() {
 function processPhase(phaseName, phaseCode) {
   const pRows = filterPrevByPhase(phaseCode);
   const rRows = filterRealByPhase(phaseCode);
-  const lower  = phaseName.toLowerCase(); // 'sia2', 'sia3', 'sia4'
+  const phaseNum = phaseCode.replace('0',''); // '2', '3', '4'
 
   if (!pRows.length && !rRows.length) {
-    const kpiEl = document.getElementById(`kpiSectionSIA${phaseCode.replace('0','')}`);
+    const kpiEl = document.getElementById(`kpiSection${phaseName}`);
     if (kpiEl) kpiEl.innerHTML = `<div class="hint">ℹ️ Aucune donnée pour ${phaseName}</div>`;
     return;
   }
 
-  const phaseNum = phaseCode.replace('0',''); // '2', '3', '4'
-
-  // === COURBES S ===
+  // COURBES S
   const sData = buildSCurves(pRows, rRows);
   drawSCurveChart(`chart${phaseName}`, sData, phaseName);
 
-  // === KPIs ===
+  // TABLEAU MENSUEL (AJOUT PARTOUT)
+  renderMonthlyTable(`table${phaseName}Monthly`, sData);
+
+  // KPIs
   const budgetRev = pRows.filter(r => r['Modèle de prévision']==='Budget_Rev').reduce((a,r) => a+toNum(r['Montant total du coût']),0);
   const at        = pRows.filter(r => r['Modèle de prévision']==='AT').reduce((a,r) => a+toNum(r['Montant total du coût']),0);
   const reel      = rRows.reduce((a,r) => a+toNum(r['Montant total du coût']),0);
@@ -669,8 +737,7 @@ function processPhase(phaseName, phaseCode) {
     kpiCard('Écart vs AT', (ecart>=0?'+':'')+toCHF(ecart), 'CHF', ecart>=0?'negative':'positive') +
     kpiCard('Avancement', `${pct}%`, '% AT', '');
 
-  // === TÂCHES (SIA 2/3/4 → par tâche) ===
-  // Collecte toutes les tâches distinctes
+  // TÂCHES
   const taskMap = {};
   pRows.forEach(r => {
     const task   = getTaskName(r);
@@ -688,13 +755,10 @@ function processPhase(phaseName, phaseCode) {
   });
   const taskList = Object.values(taskMap).filter(t => t.budget>0 || t.budgetRev>0 || t.at>0 || t.reel>0);
 
-  // === TABLEAU BUDGETS PAR TÂCHE ===
+  // TABLEAU BUDGETS PAR TÂCHE
   const tblBudget = document.getElementById(`table${phaseName}Budget`);
   if (tblBudget) {
-    let html = `<thead><tr>
-      <th>Tâche</th><th>Budget</th><th>Budget Révisé</th><th>AT</th>
-      <th>Réel</th><th>Écart BR</th><th>Écart AT</th><th>% AT</th>
-    </tr></thead><tbody>`;
+    let html = `<thead><tr><th>Tâche</th><th>Budget</th><th>Budget Révisé</th><th>AT</th><th>Réel</th><th>Écart BR</th><th>Écart AT</th><th>% AT</th></tr></thead><tbody>`;
     taskList.forEach(t => {
       const eBR = t.reel - t.budgetRev, eAT = t.reel - t.at;
       const pAT = t.at>0 ? (t.reel/t.at*100).toFixed(1) : '—';
@@ -717,7 +781,7 @@ function processPhase(phaseName, phaseCode) {
     tblBudget.innerHTML = html;
   }
 
-  // === CAMEMBERT BUDGET RÉVISÉ (filtrer 0, couleurs distinctes) ===
+  // CAMEMBERT
   const pieBRId = `pie${phaseName}BR`;
   destroyChart(pieBRId);
   const pieBRCtx = document.getElementById(pieBRId);
@@ -727,7 +791,7 @@ function processPhase(phaseName, phaseCode) {
       charts[pieBRId] = new Chart(pieBRCtx, {
         type: 'doughnut',
         data: {
-          labels: validTasks.map(t => t.task),
+          labels: validTasks.map(t => t.task.length>22?t.task.substring(0,20)+'…':t.task),
           datasets: [{
             data: validTasks.map(t => t.budgetRev),
             backgroundColor: validTasks.map((_,i) => PIE_COLORS[i % PIE_COLORS.length]),
@@ -742,12 +806,10 @@ function processPhase(phaseName, phaseCode) {
           }
         }
       });
-    } else {
-      pieBRCtx.parentElement.innerHTML += '<p class="hint">Aucune donnée Budget Révisé disponible.</p>';
     }
   }
 
-  // === BARRES AVANCEMENT PAR TÂCHE ===
+  // BARRES
   const barId = `bar${phaseName}`;
   destroyChart(barId);
   const barCtx = document.getElementById(barId);
@@ -757,7 +819,7 @@ function processPhase(phaseName, phaseCode) {
       charts[barId] = new Chart(barCtx, {
         type: 'bar',
         data: {
-          labels: validBar.map(t => t.task.length>20 ? t.task.substring(0,20)+'…' : t.task),
+          labels: validBar.map(t => t.task.length>20 ? t.task.substring(0,18)+'…' : t.task),
           datasets: [
             { label:'AT',   data: validBar.map(t=>t.at),   backgroundColor: GE_BLUE2+'cc' },
             { label:'Réel', data: validBar.map(t=>t.reel), backgroundColor: GE_RED+'cc' }
@@ -772,24 +834,22 @@ function processPhase(phaseName, phaseCode) {
     }
   }
 
-  // === IMPUTATIONS HONORAIRES ===
+  // IMPUTATIONS
   processImputationsPhase(phaseName, phaseCode, pRows, rRows);
 
-  // === PLANNING ===
+  // PLANNING
   processPlanningPhase(phaseName, phaseCode, pRows, rRows);
 }
 
 // ============================================================
-// IMPUTATIONS PAR PHASE (SIA 2/3/4)
+// IMPUTATIONS PAR PHASE
 // ============================================================
 function processImputationsPhase(phaseName, phaseCode, pRows, rRows) {
   const phaseNum = phaseCode.replace('0','');
 
-  // Honoraires uniquement
   const honorPrev = pRows.filter(r => isHonoraires(r));
   const honorReal = rRows.filter(r => isHonoraires(r));
 
-  // Grouper par tâche + int/ext
   const taskMap = {};
   honorPrev.forEach(r => {
     const task  = getTaskName(r);
@@ -812,7 +872,6 @@ function processImputationsPhase(phaseName, phaseCode, pRows, rRows) {
   const intItems = items.filter(t => !t.ext);
   const extItems = items.filter(t => t.ext);
 
-  // KPI
   const totBR   = items.reduce((a,t) => a+t.br,   0);
   const totAT   = items.reduce((a,t) => a+t.at,   0);
   const totReel = items.reduce((a,t) => a+t.reel, 0);
@@ -825,13 +884,10 @@ function processImputationsPhase(phaseName, phaseCode, pRows, rRows) {
     kpiCard('Réel Honoraires', toCHF(totReel)) +
     kpiCard('Écart AT', (ecartAT>=0?'+':'')+toCHF(ecartAT), 'CHF', ecartAT>=0?'negative':'positive');
 
-  // Tableau
-  const tbl = document.getElementById(`tableImpSIA${phaseNum}`) || document.getElementById(`tableImput${phaseName}`);
+  const tbl = document.getElementById(`tableImputSIA${phaseNum}`) || document.getElementById(`tableImpSIA${phaseNum}`);
   if (!tbl) return;
 
-  let html = `<thead><tr>
-    <th>Tâche</th><th>Type</th><th>Budget Révisé</th><th>AT</th><th>Réel</th><th>Écart BR</th><th>Écart AT</th>
-  </tr></thead><tbody>`;
+  let html = `<thead><tr><th>Tâche</th><th>Type</th><th>Budget Révisé</th><th>AT</th><th>Réel</th><th>Écart BR</th><th>Écart AT</th></tr></thead><tbody>`;
 
   const renderSection = (list, type, cls, clsSub) => {
     if (!list.length) return '';
@@ -850,7 +906,7 @@ function processImputationsPhase(phaseName, phaseCode, pRows, rRows) {
     });
     const sE = sReel-sAT;
     rows += `<tr class="${clsSub}">
-      <td colspan="2">Sous-total ${type==='int'?'Interne':'Externe'}</td>
+      <td colspan="2"><strong>Sous-total ${type==='int'?'Interne':'Externe'}</strong></td>
       <td>${toCHF(sBR)}</td><td>${toCHF(sAT)}</td><td>${toCHF(sReel)}</td>
       <td class="${(sReel-sBR)>=0?'negative':'positive'}">${((sReel-sBR)>=0?'+':'')+toCHF(sReel-sBR)}</td>
       <td class="${sE>=0?'negative':'positive'}">${(sE>=0?'+':'')+toCHF(sE)}</td>
@@ -862,7 +918,7 @@ function processImputationsPhase(phaseName, phaseCode, pRows, rRows) {
   html += renderSection(extItems, 'ext', 'section-header-ext', 'subtotal-ext');
   const totalEcatAT = totReel - totAT;
   html += `</tbody><tfoot><tr>
-    <td colspan="2">TOTAL HONORAIRES</td>
+    <td colspan="2"><strong>TOTAL HONORAIRES</strong></td>
     <td>${toCHF(totBR)}</td><td>${toCHF(totAT)}</td><td>${toCHF(totReel)}</td>
     <td class="${(totReel-totBR)>=0?'negative':'positive'}">${((totReel-totBR)>=0?'+':'')+toCHF(totReel-totBR)}</td>
     <td class="${totalEcatAT>=0?'negative':'positive'}">${(totalEcatAT>=0?'+':'')+toCHF(totalEcatAT)}</td>
@@ -879,11 +935,9 @@ function processPlanningPhase(phaseName, phaseCode, pRows, rRows) {
   const ctx = document.getElementById(ganttId);
   if (!ctx) return;
 
-  const MODELS = ['Budget_Rev','AT'];
   const taskNames = [...new Set(pRows.map(r => getTaskName(r)))];
   if (!taskNames.length) return;
 
-  // Pour chaque tâche × modèle : dates min/max
   const ganttData = taskNames.map(task => {
     const taskPrev = pRows.filter(r => getTaskName(r) === task);
     const getBR = taskPrev.filter(r => r['Modèle de prévision']==='Budget_Rev');
@@ -905,7 +959,6 @@ function processPlanningPhase(phaseName, phaseCode, pRows, rRows) {
 
   if (!ganttData.length) return;
 
-  // Axe global
   const allDates = ganttData.flatMap(t => [t.br?.start, t.br?.end, t.at?.start, t.at?.end, t.reel?.start, t.reel?.end]).filter(Boolean);
   const axisStart = new Date(Math.min(...allDates));
   const axisEnd   = new Date(Math.max(...allDates));
@@ -971,21 +1024,13 @@ function processPlanningPhase(phaseName, phaseCode, pRows, rRows) {
 function processSIA5Budget() {
   const pRows = filterPrevByPhase('05');
   const rRows = filterRealByPhase('05');
-  const k = parseFloat(document.getElementById('coefK_num').value) || 12;
-  const isSOnly = document.getElementById('viewSOnly').checked;
 
   if (!pRows.length && !rRows.length) return;
 
-  // === COURBES S GLOBALES SIA 5 ===
   const sData = buildSCurves(pRows, rRows);
   drawSCurveChart('chartSIA5', sData, 'SIA5');
+  renderMonthlyTable('tableSIA5Monthly', sData);
 
-  // === TABLEAU MENSUEL (NOUVEAU) ===
-  if (sData) {
-    renderMonthlySIA5Table(sData);
-  }
-
-  // === KPIs ===
   const budgetRev = pRows.filter(r => r['Modèle de prévision']==='Budget_Rev').reduce((a,r) => a+toNum(r['Montant total du coût']),0);
   const at        = pRows.filter(r => r['Modèle de prévision']==='AT').reduce((a,r) => a+toNum(r['Montant total du coût']),0);
   const reel      = rRows.reduce((a,r) => a+toNum(r['Montant total du coût']),0);
@@ -1000,7 +1045,6 @@ function processSIA5Budget() {
     kpiCard('Écart vs AT', (ecart>=0?'+':'')+toCHF(ecart), 'CHF', ecart>=0?'negative':'positive') +
     kpiCard('Avancement', `${pct}%`, '% AT', '');
 
-  // === TABLEAU BUDGETS PAR SOUS-PROJET ===
   const tblBudget = document.getElementById('tableSIA5Budget');
   if (tblBudget) {
     const taskMap = {};
@@ -1019,10 +1063,7 @@ function processSIA5Budget() {
       taskMap[id].reel += toNum(r['Montant total du coût']);
     });
 
-    let html = `<thead><tr>
-      <th>Sous-Projet</th><th>Budget</th><th>Budget Révisé</th><th>AT</th>
-      <th>Réel</th><th>Écart BR</th><th>Écart AT</th><th>% AT</th>
-    </tr></thead><tbody>`;
+    let html = `<thead><tr><th>Sous-Projet</th><th>Budget</th><th>Budget Révisé</th><th>AT</th><th>Réel</th><th>Écart BR</th><th>Écart AT</th><th>% AT</th></tr></thead><tbody>`;
 
     Object.entries(taskMap).forEach(([id, t]) => {
       if (t.budget===0 && t.budgetRev===0 && t.at===0 && t.reel===0) return;
@@ -1047,7 +1088,6 @@ function processSIA5Budget() {
     tblBudget.innerHTML = html;
   }
 
-  // === CAMEMBERT SIA 5 ===
   destroyChart('pieSIA5BR');
   const pieSIA5Ctx = document.getElementById('pieSIA5BR');
   if (pieSIA5Ctx) {
@@ -1079,7 +1119,6 @@ function processSIA5Budget() {
     }
   }
 
-  // === BARRES SIA 5 ===
   destroyChart('barSIA5');
   const barSIA5Ctx = document.getElementById('barSIA5');
   if (barSIA5Ctx) {
@@ -1110,79 +1149,15 @@ function processSIA5Budget() {
 }
 
 // ============================================================
-// TABLEAU MENSUEL SIA 5 (NOUVEAU)
-// ============================================================
-function renderMonthlySIA5Table(sData) {
-  const { axis, series, realMonth, realCum } = sData;
-  const tbl = document.getElementById('tableSIA5Monthly');
-  if (!tbl) return;
-
-  // Dériver les valeurs mensuelles depuis cumul
-  const brCum  = series['Budget_Rev'];
-  const atCum  = series['AT'];
-
-  // Mensuel projeté (delta cumul)
-  const getMonthly = cum => cum.map((v,i) => {
-    if (v === null) return null;
-    const prev = i > 0 ? (cum[i-1] || 0) : 0;
-    return v - prev;
-  });
-  const brMonthly = getMonthly(brCum);
-  const atMonthly = getMonthly(atCum);
-
-  // Cumul réel
-  let cumReel = 0;
-  const realCumArr = realMonth.map(v => { cumReel += v; return cumReel; });
-
-  const today = new Date(), mmToday = yyyymm(today);
-
-  let html = `<thead><tr>
-    <th>Mois</th>
-    <th>BR Mensuel (S)</th><th>BR Cumulé</th>
-    <th>Réel Mensuel</th><th>Réel Cumulé</th>
-    <th>Écart Mensuel</th><th>Écart Cumulé</th>
-  </tr></thead><tbody>`;
-
-  axis.forEach((mm, i) => {
-    if (axis[i] > mmToday && realMonth[i] === 0) {
-      // Mois futur sans réel : afficher la projection uniquement si BR non null
-      if (brCum[i] === null) return;
-    }
-    const brM   = brMonthly[i] || 0;
-    const brC   = brCum[i] || 0;
-    const reelM = realMonth[i] || 0;
-    const reelC = realCumArr[i] || 0;
-    const ecM   = reelM - brM;
-    const ecC   = reelC - brC;
-    const isPast = mm <= mmToday;
-    const rowClass = isPast ? '' : 'style="color:#888;font-style:italic;"';
-
-    html += `<tr ${rowClass}>
-      <td>${fmtMonth(mm)}${mm===mmToday?' <span class="badge en-cours">Aujourd\'hui</span>':''}</td>
-      <td>${brM>0 ? toCHF(brM) : '—'}</td>
-      <td>${brC>0 ? toCHF(brC) : '—'}</td>
-      <td>${reelM>0 ? toCHF(reelM) : isPast?'<span style="color:#999">0</span>':'—'}</td>
-      <td>${reelC>0 ? toCHF(reelC) : '—'}</td>
-      <td class="${isPast && reelM>0 ? (ecM>=0?'negative':'positive') : ''}">${isPast && (reelM>0||brM>0) ? (ecM>=0?'+':'')+toCHF(ecM) : '—'}</td>
-      <td class="${isPast && reelC>0 ? (ecC>=0?'negative':'positive') : ''}">${isPast && (reelC>0||brC>0) ? (ecC>=0?'+':'')+toCHF(ecC) : '—'}</td>
-    </tr>`;
-  });
-  html += `</tbody>`;
-  tbl.innerHTML = html;
-}
-
-// ============================================================
 // SIA 5 — IMPUTATIONS
 // ============================================================
 function processSIA5Imputations() {
   const pRows = filterPrevByPhase('05');
   const rRows = filterRealByPhase('05');
 
-  // Honoraires uniquement
   const honorPrev = pRows.filter(r => isHonoraires(r));
   const honorReal = rRows.filter(r => isHonoraires(r));
 
-  // Grouper par sous-projet + int/ext
   const taskMap = {};
   honorPrev.forEach(r => {
     const id    = String(r['ID projet']||r['ID Projet']||'');
@@ -1205,7 +1180,6 @@ function processSIA5Imputations() {
   const intItems = items.filter(t => !t.ext);
   const extItems = items.filter(t => t.ext);
 
-  // KPI
   const totBR   = items.reduce((a,t)=>a+t.br,  0);
   const totAT   = items.reduce((a,t)=>a+t.at,  0);
   const totReel = items.reduce((a,t)=>a+t.reel, 0);
@@ -1218,14 +1192,10 @@ function processSIA5Imputations() {
     kpiCard('Réel Honoraires',  toCHF(totReel)) +
     kpiCard('Écart vs AT', (ecartAT>=0?'+':'')+toCHF(ecartAT), 'CHF', ecartAT>=0?'negative':'positive');
 
-  // Tableau
   const tbl = document.getElementById('tableImputSIA5');
   if (!tbl) return;
 
-  let html = `<thead><tr>
-    <th>Sous-Projet</th><th>Type</th><th>Budget Révisé</th><th>AT</th>
-    <th>Réel</th><th>Écart BR</th><th>Écart AT</th>
-  </tr></thead><tbody>`;
+  let html = `<thead><tr><th>Sous-Projet</th><th>Type</th><th>Budget Révisé</th><th>AT</th><th>Réel</th><th>Écart BR</th><th>Écart AT</th></tr></thead><tbody>`;
 
   const renderSection = (list, type, cls, clsSub) => {
     if (!list.length) return '';
@@ -1244,7 +1214,7 @@ function processSIA5Imputations() {
     });
     const sE=sReel-sAT;
     rows += `<tr class="${clsSub}">
-      <td colspan="2">Sous-total ${type==='int'?'Interne':'Externe'}</td>
+      <td colspan="2"><strong>Sous-total ${type==='int'?'Interne':'Externe'}</strong></td>
       <td>${toCHF(sBR)}</td><td>${toCHF(sAT)}</td><td>${toCHF(sReel)}</td>
       <td class="${(sReel-sBR)>=0?'negative':'positive'}">${((sReel-sBR)>=0?'+':'')+toCHF(sReel-sBR)}</td>
       <td class="${sE>=0?'negative':'positive'}">${(sE>=0?'+':'')+toCHF(sE)}</td>
@@ -1255,7 +1225,7 @@ function processSIA5Imputations() {
   html += renderSection(intItems, 'int', 'section-header-int', 'subtotal-int');
   html += renderSection(extItems, 'ext', 'section-header-ext', 'subtotal-ext');
   html += `</tbody><tfoot><tr>
-    <td colspan="2">TOTAL HONORAIRES</td>
+    <td colspan="2"><strong>TOTAL HONORAIRES</strong></td>
     <td>${toCHF(totBR)}</td><td>${toCHF(totAT)}</td><td>${toCHF(totReel)}</td>
     <td class="${(totReel-totBR)>=0?'negative':'positive'}">${((totReel-totBR)>=0?'+':'')+toCHF(totReel-totBR)}</td>
     <td class="${ecartAT>=0?'negative':'positive'}">${(ecartAT>=0?'+':'')+toCHF(ecartAT)}</td>
@@ -1264,13 +1234,12 @@ function processSIA5Imputations() {
 }
 
 // ============================================================
-// SIA 5 — PLANNING (avec édition inline dans tableau)
+// SIA 5 — PLANNING (éditable)
 // ============================================================
 function processPlanningSIA5() {
   const pRows = filterPrevByPhase('05');
   const rRows = filterRealByPhase('05');
 
-  // Construire les données de planning par sous-projet
   const planData = PROJECT_ORDER.map(id => {
     const brRows   = pRows.filter(r => (r['ID projet']||r['ID Projet'])===id && r['Modèle de prévision']==='Budget_Rev');
     const atRows   = pRows.filter(r => (r['ID projet']||r['ID Projet'])===id && r['Modèle de prévision']==='AT');
@@ -1294,7 +1263,6 @@ function processPlanningSIA5() {
     };
   });
 
-  // === TABLEAU PLANNING ÉDITABLE ===
   const tblPlan = document.getElementById('tablePlanningSIA5');
   if (tblPlan) {
     let html = `<thead><tr>
@@ -1331,7 +1299,7 @@ function processPlanningSIA5() {
     html += `</tbody>`;
     tblPlan.innerHTML = html;
 
-    // Event en temps réel : chaque changement de date déclenche le recalcul immédiat
+    // Event temps réel
     tblPlan.querySelectorAll('.plan-input').forEach(input => {
       input.addEventListener('change', () => {
         collectManualDates();
@@ -1347,7 +1315,6 @@ function processPlanningSIA5() {
     });
   }
 
-  // Gantt initial
   renderGanttSIA5(planData);
 }
 
@@ -1426,7 +1393,33 @@ function renderGanttSIA5(planData) {
 }
 
 // ============================================================
-// EXPORT PDF — Corrigé
+// EXPORTS EXCEL / PNG (RÉINTÉGRÉS)
+// ============================================================
+
+function exportChartPNG(canvasId) {
+  const canvas = document.getElementById(canvasId);
+  if (!canvas) { alert('Graphique introuvable'); return; }
+  canvas.toBlob(blob => {
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement('a');
+    a.href = url;
+    a.download = `${canvasId}_${new Date().toISOString().slice(0,10)}.png`;
+    a.click();
+    URL.revokeObjectURL(url);
+  });
+}
+
+function exportTableExcel(tableId, filename) {
+  const tbl = document.getElementById(tableId);
+  if (!tbl) { alert('Tableau introuvable'); return; }
+  
+  // Convertir table HTML en workbook
+  const wb = XLSX.utils.table_to_book(tbl, { sheet: filename });
+  XLSX.writeFile(wb, `${filename}_${new Date().toISOString().slice(0,10)}.xlsx`);
+}
+
+// ============================================================
+// EXPORT PDF (déjà présent, inchangé)
 // ============================================================
 async function generatePDF() {
   const { jsPDF } = window.jspdf;
@@ -1438,7 +1431,6 @@ async function generatePDF() {
   let y = margin;
   let pageCount = 1;
 
-  // --- Helpers PDF ---
   const checkNewPage = (needed=20) => {
     if (y + needed > pageH - margin) {
       doc.addPage();
@@ -1524,7 +1516,6 @@ async function generatePDF() {
     const colW = contentW / headers.length;
     checkNewPage(12);
 
-    // Header
     doc.setFillColor(22,58,95);
     doc.rect(margin, y, contentW, 7, 'F');
     doc.setTextColor(255,255,255);
@@ -1575,25 +1566,25 @@ async function generatePDF() {
     } catch(e) { console.warn('Chart capture failed:', canvasId, e); }
   };
 
-  // --- Section générique par phase ---
-  const renderPhasePDF = async (phaseLabel, phaseSuffix, phases3) => {
+  const renderPhasePDF = async (phaseLabel, phaseSuffix) => {
     addTitle(`${phaseLabel} — BUDGETS`, 1);
     addKPIs(`kpiSection${phaseSuffix}`);
     await addChartCanvas(`chart${phaseSuffix}`, 55);
+    addTitle('Tableau Mensuel', 2);
+    addTable(`table${phaseSuffix}Monthly`, 24);
     addTitle('Tableau Budgets', 2);
     addTable(`table${phaseSuffix}Budget`);
     await addChartCanvas(`pie${phaseSuffix}BR`, 45);
     await addChartCanvas(`bar${phaseSuffix}`, 45);
 
     addTitle(`${phaseLabel} — IMPUTATIONS`, 1);
-    addKPIs(`kpiSectionImp${phaseSuffix}`);
-    addTable(`tableImpSIA${phaseSuffix.replace('SIA','')}` , 30);
+    addKPIs(`kpiSectionImpSIA${phaseSuffix.replace('SIA','')}`);
+    addTable(`tableImputSIA${phaseSuffix.replace('SIA','')}` , 30);
 
     addTitle(`${phaseLabel} — PLANNING`, 1);
     await addChartCanvas(`gantt${phaseSuffix}`, 65);
   };
 
-  // === GÉNÉRATION SELON SCOPE ===
   renderHeader();
 
   // Page de garde
@@ -1620,7 +1611,6 @@ async function generatePDF() {
     addTitle('RÉCAPITULATIF GLOBAL — BUDGETS', 1);
     addKPIs('recapBudgetKPI');
     await addChartCanvas('recapBudgetChart', 55);
-    addTitle('Tableau Comparatif par Phase', 2);
     addTable('recapBudgetTable');
     addTitle('RÉCAPITULATIF GLOBAL — IMPUTATIONS', 1);
     addKPIs('recapImputKPI');
@@ -1630,17 +1620,17 @@ async function generatePDF() {
     await addChartCanvas('recapPlanningChart', 60);
   }
 
-  if (scope === 'sia2' || scope === 'all') await renderPhasePDF('PHASE SIA 2', 'SIA2', true);
-  if (scope === 'sia3' || scope === 'all') await renderPhasePDF('PHASE SIA 3', 'SIA3', true);
-  if (scope === 'sia4' || scope === 'all') await renderPhasePDF('PHASE SIA 4', 'SIA4', true);
+  if (scope === 'sia2' || scope === 'all') await renderPhasePDF('PHASE SIA 2', 'SIA2');
+  if (scope === 'sia3' || scope === 'all') await renderPhasePDF('PHASE SIA 3', 'SIA3');
+  if (scope === 'sia4' || scope === 'all') await renderPhasePDF('PHASE SIA 4', 'SIA4');
 
   if (scope === 'sia5' || scope === 'all') {
     addTitle('PHASE SIA 5 — BUDGETS', 1);
     addKPIs('kpiSectionSIA5');
     await addChartCanvas('chartSIA5', 55);
-    addTitle('Tableau Mensuel Budget Révisé vs Réel', 2);
+    addTitle('Tableau Mensuel', 2);
     addTable('tableSIA5Monthly', 24);
-    addTitle('Tableau Budgets par Sous-Projet', 2);
+    addTitle('Tableau Budgets', 2);
     addTable('tableSIA5Budget');
     await addChartCanvas('pieSIA5BR', 45);
     await addChartCanvas('barSIA5', 45);
@@ -1654,7 +1644,6 @@ async function generatePDF() {
     await addChartCanvas('ganttSIA5', 65);
   }
 
-  // Numérotation finale
   const totalPages = doc.internal.getNumberOfPages();
   for (let i=1; i<=totalPages; i++) {
     doc.setPage(i);
