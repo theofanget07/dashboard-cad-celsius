@@ -32,21 +32,14 @@
 <!-- ═══════════════════ CONTRÔLES GLOBAUX STICKY ═══════════════════ -->
 <div class="global-controls">
   <div class="controls-inner">
-    <!-- COLONNE 1 : Prévisions -->
     <div class="control-group">
       <label>📁 <strong>Prévisions</strong></label>
       <input type="file" id="prevFile" accept=".xlsx,.xls">
-      <span id="prevFileStatus" class="file-status"></span>
     </div>
-    
-    <!-- COLONNE 2 : Transactions (renommé) -->
     <div class="control-group">
-      <label>📁 <strong>Transactions</strong></label>
+      <label>📁 <strong>Réalisations</strong></label>
       <input type="file" id="realFile" accept=".xlsx,.xls">
-      <span id="realFileStatus" class="file-status"></span>
     </div>
-    
-    <!-- COLONNE 3 : Coef k -->
     <div class="control-group">
       <label>⚙️ <strong>Coef. k</strong> <span class="hint-inline">(courbure S)</span></label>
       <div class="k-wrap">
@@ -54,8 +47,6 @@
         <input type="number" id="coefK_num" min="4" max="20" value="12">
       </div>
     </div>
-    
-    <!-- COLONNE 4 : Vue temporelle -->
     <div class="control-group">
       <label>📅 <strong>Vue temporelle</strong></label>
       <div class="toggle">
@@ -207,18 +198,6 @@
       <div class="table-wrapper"><table id="tableImputSIA2" class="table"></table></div>
     </div>
 
-    <!-- NOUVEAU : Tableau Honoraires par Ressource SIA2 -->
-    <div class="card">
-      <div class="card-header">
-        <h2>👤 Honoraires par Ressource</h2>
-        <div class="card-actions">
-          <button class="btn-export-sm btn-excel" onclick="exportTableExcel('tableRessourceSIA2', 'SIA2_Ressources')">📊 Excel</button>
-        </div>
-      </div>
-      <div class="hint">💡 Détail des honoraires par personne/ressource</div>
-      <div class="table-wrapper"><table id="tableRessourceSIA2" class="table"></table></div>
-    </div>
-
     <div class="section-title"><h2>📅 PLANNING — Phase SIA 2</h2></div>
     <div class="card">
       <div class="card-header">
@@ -228,18 +207,6 @@
         </div>
       </div>
       <div class="chart-wrapper-gantt"><canvas id="ganttSIA2"></canvas></div>
-    </div>
-
-    <!-- NOUVEAU : Tableau Planning éditable SIA2 -->
-    <div class="card">
-      <div class="card-header">
-        <h2>📋 Tableau Planning — Dates Réelles Éditables</h2>
-        <div class="card-actions">
-          <button class="btn-export-sm btn-excel" onclick="exportTableExcel('tablePlanningSIA2', 'SIA2_Planning')">📊 Excel</button>
-        </div>
-      </div>
-      <div class="hint">💡 Modifier les dates réelles → Gantt se met à jour • BR/AT en lecture seule</div>
-      <div class="table-wrapper"><table id="tablePlanningSIA2" class="table"></table></div>
     </div>
 
   </div>
@@ -316,18 +283,6 @@
       <div class="table-wrapper"><table id="tableImputSIA3" class="table"></table></div>
     </div>
 
-    <!-- NOUVEAU : Tableau Honoraires par Ressource SIA3 -->
-    <div class="card">
-      <div class="card-header">
-        <h2>👤 Honoraires par Ressource</h2>
-        <div class="card-actions">
-          <button class="btn-export-sm btn-excel" onclick="exportTableExcel('tableRessourceSIA3', 'SIA3_Ressources')">📊 Excel</button>
-        </div>
-      </div>
-      <div class="hint">💡 Détail des honoraires par personne/ressource</div>
-      <div class="table-wrapper"><table id="tableRessourceSIA3" class="table"></table></div>
-    </div>
-
     <div class="section-title"><h2>📅 PLANNING — Phase SIA 3</h2></div>
     <div class="card">
       <div class="card-header">
@@ -337,18 +292,6 @@
         </div>
       </div>
       <div class="chart-wrapper-gantt"><canvas id="ganttSIA3"></canvas></div>
-    </div>
-
-    <!-- NOUVEAU : Tableau Planning éditable SIA3 -->
-    <div class="card">
-      <div class="card-header">
-        <h2>📋 Tableau Planning — Dates Réelles Éditables</h2>
-        <div class="card-actions">
-          <button class="btn-export-sm btn-excel" onclick="exportTableExcel('tablePlanningSIA3', 'SIA3_Planning')">📊 Excel</button>
-        </div>
-      </div>
-      <div class="hint">💡 Modifier les dates réelles → Gantt se met à jour • BR/AT en lecture seule</div>
-      <div class="table-wrapper"><table id="tablePlanningSIA3" class="table"></table></div>
     </div>
 
   </div>
@@ -425,18 +368,6 @@
       <div class="table-wrapper"><table id="tableImputSIA4" class="table"></table></div>
     </div>
 
-    <!-- NOUVEAU : Tableau Honoraires par Ressource SIA4 -->
-    <div class="card">
-      <div class="card-header">
-        <h2>👤 Honoraires par Ressource</h2>
-        <div class="card-actions">
-          <button class="btn-export-sm btn-excel" onclick="exportTableExcel('tableRessourceSIA4', 'SIA4_Ressources')">📊 Excel</button>
-        </div>
-      </div>
-      <div class="hint">💡 Détail des honoraires par personne/ressource</div>
-      <div class="table-wrapper"><table id="tableRessourceSIA4" class="table"></table></div>
-    </div>
-
     <div class="section-title"><h2>📅 PLANNING — Phase SIA 4</h2></div>
     <div class="card">
       <div class="card-header">
@@ -446,18 +377,6 @@
         </div>
       </div>
       <div class="chart-wrapper-gantt"><canvas id="ganttSIA4"></canvas></div>
-    </div>
-
-    <!-- NOUVEAU : Tableau Planning éditable SIA4 -->
-    <div class="card">
-      <div class="card-header">
-        <h2>📋 Tableau Planning — Dates Réelles Éditables</h2>
-        <div class="card-actions">
-          <button class="btn-export-sm btn-excel" onclick="exportTableExcel('tablePlanningSIA4', 'SIA4_Planning')">📊 Excel</button>
-        </div>
-      </div>
-      <div class="hint">💡 Modifier les dates réelles → Gantt se met à jour • BR/AT en lecture seule</div>
-      <div class="table-wrapper"><table id="tablePlanningSIA4" class="table"></table></div>
     </div>
 
   </div>
@@ -557,18 +476,6 @@
         <div class="hint">💡 Regroupement par métier transversal • Distinction Interne/Externe • Comparaison BR / AT / Réel</div>
         <div class="table-wrapper"><table id="tableImputSIA5" class="table"></table></div>
       </div>
-
-      <!-- NOUVEAU : Tableau Honoraires par Ressource SIA5 -->
-      <div class="card">
-        <div class="card-header">
-          <h2>👤 Honoraires par Ressource</h2>
-          <div class="card-actions">
-            <button class="btn-export-sm btn-excel" onclick="exportTableExcel('tableRessourceSIA5', 'SIA5_Ressources')">📊 Excel</button>
-          </div>
-        </div>
-        <div class="hint">💡 Détail des honoraires par personne/ressource</div>
-        <div class="table-wrapper"><table id="tableRessourceSIA5" class="table"></table></div>
-      </div>
     </div>
 
     <!-- SOUS-ONGLET PLANNING -->
@@ -591,12 +498,12 @@
       </div>
       <div class="card">
         <div class="card-header">
-          <h2>📋 Tableau Planning — Dates Réelles Éditables</h2>
+          <h2>📋 Tableau Planning — Dates Éditables</h2>
           <div class="card-actions">
             <button class="btn-export-sm btn-excel" onclick="exportTableExcel('tablePlanningSIA5', 'SIA5_Planning')">📊 Excel</button>
           </div>
         </div>
-        <div class="hint">💡 Modifier les dates réelles → Gantt se met à jour • BR/AT en lecture seule</div>
+        <div class="hint">💡 Modifier les dates projetées → Gantt se met à jour automatiquement</div>
         <div class="table-wrapper"><table id="tablePlanningSIA5" class="table"></table></div>
       </div>
     </div>
