@@ -1,145 +1,199 @@
 <!DOCTYPE html>
 <html lang="fr">
 <head>
-  <meta charset="UTF-8">
-  <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <title>Dashboard CAD — Groupe E Celsius</title>
-  <link rel="stylesheet" href="style.css">
-  <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
-  <script src="https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js"></script>
-  <script src="https://cdnjs.cloudflare.com/ajax/libs/html2canvas/1.4.1/html2canvas.min.js"></script>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Dashboard CAD | Groupe E Celsius</title>
+  <!-- CDN -->
+  <script src="https://cdn.jsdelivr.net/npm/xlsx@0.18.5/dist/xlsx.full.min.js"></script>
+  <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.0/dist/chart.umd.min.js"></script>
   <script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js"></script>
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/html2canvas/1.4.1/html2canvas.min.js"></script>
+  <link rel="stylesheet" href="style.css" />
 </head>
 <body>
-  <div class="container">
-    <header>
-      <h1>🔥 Dashboard CAD — Groupe E Celsius</h1>
-      <p class="subtitle">Gestion des Coûts & Prévisions — Multi-Phase SIA</p>
-    </header>
-
-    <section class="upload-section">
-      <div class="upload-group">
-        <label for="prevFile">📊 Fichier Prévisions (Excel)</label>
-        <input type="file" id="prevFile" accept=".xlsx,.xls">
+  <!-- ===== HERO HEADER ===== -->
+  <div class="hero">
+    <div class="hero-content">
+      <div>
+        <h1>📊 Dashboard CAD — Groupe E Celsius</h1>
+        <p class="hero-subtitle">Analyse financière et suivi des imputations | Phase SIA 5</p>
       </div>
-      <div class="upload-group">
-        <label for="realFile">💰 Fichier Coûts Réels (Excel)</label>
-        <input type="file" id="realFile" accept=".xlsx,.xls">
+      <div class="hero-actions">
+        <button class="btn-pdf" id="btnPDF">📄 Export PDF</button>
       </div>
-    </section>
-
-    <section class="controls">
-      <div class="control-group">
-        <label for="coefK">📐 Coef. k (courbure): <span id="coefK_num">12</span></label>
-        <input type="range" id="coefK" min="4" max="20" step="0.5" value="12">
-        <div class="help-text">💡 Recommandations: 6–8 (études) • 10–14 (CAPEX) • 14–18 (projets courts)</div>
-      </div>
-      <div class="control-group">
-        <label>
-          <input type="radio" name="viewMode" id="viewGlobal" checked>
-          📅 Vue globale (1er coût → aujourd'hui)
-        </label>
-        <label>
-          <input type="radio" name="viewMode" id="viewSOnly">
-          📊 Vue courbes S uniquement (dates modèles)
-        </label>
-      </div>
-    </section>
-
-    <div id="status" class="status">⏳ En attente des fichiers...</div>
-
-    <!-- ONGLETS -->
-    <div class="tabs">
-      <button class="tab-btn active" data-tab="tabRecap">📊 Récap Global</button>
-      <button class="tab-btn" data-tab="tabSIA2">🔹 SIA 2</button>
-      <button class="tab-btn" data-tab="tabSIA3">🔹 SIA 3</button>
-      <button class="tab-btn" data-tab="tabSIA4">🔹 SIA 4</button>
-      <button class="tab-btn" data-tab="tabSIA5">🔹 SIA 5</button>
     </div>
-
-    <!-- RECAP GLOBAL -->
-    <div id="tabRecap" class="tab-content active">
-      <section id="kpiSectionGlobal" class="kpi-section"></section>
-      <section class="card">
-        <h2>📈 Courbes S Consolidées (Toutes phases)</h2>
-        <canvas id="chartGlobal" style="height:400px;"></canvas>
-      </section>
-      <section class="card">
-        <h2>🥧 Répartition par Phase</h2>
-        <canvas id="chartPiePhases" style="height:350px;"></canvas>
-      </section>
-      <section class="card" id="tablePhaseCard">
-        <h2>📋 Consolidation par Phase</h2>
-        <table id="tablePhases"></table>
-      </section>
-      <section class="card">
-        <h2>📅 Gantt Multi-Phase</h2>
-        <canvas id="chartGanttGlobal" style="height:400px;"></canvas>
-      </section>
-      <section class="export-section">
-        <label for="pdfPhaseSelect">Exporter en PDF :</label>
-        <select id="pdfPhaseSelect">
-          <option value="recap">📊 Récap Global</option>
-          <option value="sia2">🔹 SIA 2</option>
-          <option value="sia3">🔹 SIA 3</option>
-          <option value="sia4">🔹 SIA 4</option>
-          <option value="sia5">🔹 SIA 5</option>
-        </select>
-        <button id="btnPDF" class="btn-primary">📄 Générer PDF</button>
-      </section>
-    </div>
-
-    <!-- SIA 2 -->
-    <div id="tabSIA2" class="tab-content">
-      <section id="kpiSIA2" class="kpi-section"></section>
-      <section class="card" id="cardCourbesSIA2"><h2>📈 Courbes S SIA 2</h2><canvas id="chartSIA2" style="height:400px;"></canvas></section>
-      <section class="card" id="cardBarSIA2"><h2>📊 Avancement par Tâche</h2><canvas id="chartBarSIA2" style="height:400px;"></canvas></section>
-      <section class="card" id="tableSIA2Card"><h2>📋 Comparatif par Tâche</h2><table id="tableSIA2"></table></section>
-      <section class="card" id="cardHonoMetierSIA2"><h2>👔 Honoraires par Métier</h2><canvas id="chartHonoMetierSIA2" style="height:300px;"></canvas></section>
-    </div>
-
-    <!-- SIA 3 -->
-    <div id="tabSIA3" class="tab-content">
-      <section id="kpiSIA3" class="kpi-section"></section>
-      <section class="card" id="cardCourbesSIA3"><h2>📈 Courbes S SIA 3</h2><canvas id="chartSIA3" style="height:400px;"></canvas></section>
-      <section class="card" id="cardBarSIA3"><h2>📊 Avancement par Tâche</h2><canvas id="chartBarSIA3" style="height:400px;"></canvas></section>
-      <section class="card" id="tableSIA3Card"><h2>📋 Comparatif par Tâche</h2><table id="tableSIA3"></table></section>
-      <section class="card" id="cardHonoMetierSIA3"><h2>👔 Honoraires par Métier</h2><canvas id="chartHonoMetierSIA3" style="height:300px;"></canvas></section>
-    </div>
-
-    <!-- SIA 4 -->
-    <div id="tabSIA4" class="tab-content">
-      <section id="kpiSIA4" class="kpi-section"></section>
-      <section class="card" id="cardCourbesSIA4"><h2>📈 Courbes S SIA 4</h2><canvas id="chartSIA4" style="height:400px;"></canvas></section>
-      <section class="card" id="cardBarSIA4"><h2>📊 Avancement par Tâche</h2><canvas id="chartBarSIA4" style="height:400px;"></canvas></section>
-      <section class="card" id="tableSIA4Card"><h2>📋 Comparatif par Tâche</h2><table id="tableSIA4"></table></section>
-      <section class="card" id="cardHonoMetierSIA4"><h2>👔 Honoraires par Métier</h2><canvas id="chartHonoMetierSIA4" style="height:300px;"></canvas></section>
-    </div>
-
-    <!-- SIA 5 -->
-    <div id="tabSIA5" class="tab-content">
-      <section id="kpiSIA5" class="kpi-section"></section>
-      <section class="card" id="cardCourbesSIA5"><h2>📈 Courbes S SIA 5</h2><canvas id="chartSIA5" style="height:400px;"></canvas></section>
-      <section class="card">
-        <h2>🥧 Répartition Budget Révisé</h2>
-        <canvas id="chartPieBudgetRevSIA5" style="height:350px;"></canvas>
-      </section>
-      <section class="card">
-        <h2>🥧 Répartition AT</h2>
-        <canvas id="chartPieATSIA5" style="height:350px;"></canvas>
-      </section>
-      <section class="card" id="cardBarProjetSIA5"><h2>📊 Avancement par Projet</h2><canvas id="chartBarSIA5" style="height:400px;"></canvas></section>
-      <section class="card" id="tableSIA5Card"><h2>📋 Comparatif par Projet</h2><table id="tableSIA5"></table></section>
-      <section class="card" id="cardHonoMetierSIA5"><h2>👔 Honoraires par Métier</h2><canvas id="chartHonoMetierSIA5" style="height:300px;"></canvas></section>
-      <section class="card" id="tableRessCardSIA5"><h2>💼 Coûts Réels par Ressource (Honoraires)</h2><table id="tableRessSIA5"></table></section>
-      <section class="card" id="cardGanttSIA5"><h2>📅 Planning Gantt SIA 5</h2><canvas id="chartGanttSIA5" style="height:400px;"></canvas></section>
-    </div>
-
-    <footer>
-      <p>&copy; 2026 Groupe E Celsius — Dashboard Projets CAD</p>
-    </footer>
   </div>
 
+  <!-- ===== TABS ===== -->
+  <div class="tabs">
+    <button class="tab-btn active" data-tab="tab1">📈 Rapport Financier</button>
+    <button class="tab-btn" data-tab="tab2">💼 Imputations</button>
+    <button class="tab-btn" data-tab="tab3">📅 Planning</button>
+  </div>
+
+  <!-- ===== CONTAINER ===== -->
+  <div class="container">
+    <!-- TAB 1 : RAPPORT FINANCIER -->
+    <div class="tab-content active" id="tab1">
+      <!-- Upload -->
+      <div class="card">
+        <h2>📂 Chargement des données</h2>
+        <div class="grid-4">
+          <div class="form-col">
+            <label>Fichier Prévisions</label>
+            <input type="file" id="prevFile" accept=".xlsx,.xls" />
+          </div>
+          <div class="form-col">
+            <label>Fichier Réel</label>
+            <input type="file" id="realFile" accept=".xlsx,.xls" />
+          </div>
+          <div class="form-col">
+            <label>Coefficient k (courbure S)</label>
+            <div class="k-wrap">
+              <input type="range" id="coefK" min="4" max="20" step="0.5" value="12" />
+              <input type="number" id="coefK_num" min="4" max="20" step="0.5" value="12" />
+            </div>
+          </div>
+          <div class="form-col">
+            <label>Axe temporel</label>
+            <div class="toggle">
+              <label><input type="radio" name="viewMode" id="viewGlobal" checked /> Vue globale (Réel inclus)</label>
+              <label><input type="radio" name="viewMode" id="viewSOnly" /> Vue S uniquement (prévu)</label>
+            </div>
+          </div>
+        </div>
+        <div class="status" id="status">⏳ En attente des fichiers...</div>
+      </div>
+
+      <!-- KPI -->
+      <div class="kpi-section" id="kpiSection" style="display:none;"></div>
+
+      <!-- Courbes S -->
+      <div class="card">
+        <h2>📊 Courbes S — Suivi budgétaire cumulé</h2>
+        <p class="hint">💡 Les courbes S représentent l'évolution cumulée des budgets (modélisés) et des coûts réels au fil du temps.</p>
+        <div class="chart-wrapper">
+          <canvas id="chart"></canvas>
+        </div>
+      </div>
+
+      <!-- Tableaux Budget par ID -->
+      <div class="card">
+        <div class="card-header">
+          <h2>📋 Budgets par ID Projet</h2>
+          <div class="card-actions">
+            <button class="btn-export-sm btn-excel" onclick="exportTableToExcel('tableCmpCard', 'budgets_par_id')">📊 Excel</button>
+          </div>
+        </div>
+        <div class="table-wrapper" id="tableCmpCard">
+          <table class="table" id="tableCompare"></table>
+        </div>
+      </div>
+
+      <!-- Camemberts -->
+      <div class="charts-grid">
+        <div class="card">
+          <h2>🥧 Répartition Budget Révisé</h2>
+          <div class="chart-wrapper-small">
+            <canvas id="chartPieBudgetRev"></canvas>
+          </div>
+        </div>
+        <div class="card">
+          <h2>🥧 Répartition AT</h2>
+          <div class="chart-wrapper-small">
+            <canvas id="chartPieAT"></canvas>
+          </div>
+        </div>
+      </div>
+
+      <!-- Bar Chart -->
+      <div class="card">
+        <h2>📊 Avancement par ID Projet</h2>
+        <div class="chart-wrapper">
+          <canvas id="chartBar"></canvas>
+        </div>
+      </div>
+    </div>
+
+    <!-- TAB 2 : IMPUTATIONS -->
+    <div class="tab-content" id="tab2">
+      <!-- KPI Honoraires -->
+      <div class="kpi-section" id="kpiSectionHonoraires" style="display:none;"></div>
+
+      <!-- Honoraires par métier -->
+      <div class="card">
+        <h2>💼 Honoraires par métier</h2>
+        <p class="hint">💡 Extraction automatique depuis le champ "Nom de la tâche" (ex: "Réseau CAD", "Sous-stations", etc.)</p>
+        <div class="chart-wrapper">
+          <canvas id="chartHonoMetier"></canvas>
+        </div>
+      </div>
+
+      <!-- Tableau Ressources -->
+      <div class="card">
+        <div class="card-header">
+          <h2>👥 Détail des ressources par ID Projet</h2>
+          <div class="card-actions">
+            <button class="btn-export-sm btn-excel" onclick="exportTableToExcel('tableRessCard', 'ressources')">📊 Excel</button>
+          </div>
+        </div>
+        <p class="hint">📌 Les lignes <strong style="background:#e0f2fe;padding:2px 6px;border-radius:3px;">internes</strong> et <strong style="background:#fef3c7;padding:2px 6px;border-radius:3px;">externes</strong> sont automatiquement séparées.</p>
+        <div class="table-wrapper" id="tableRessCard">
+          <table class="table" id="tableRessources"></table>
+        </div>
+      </div>
+    </div>
+
+    <!-- TAB 3 : PLANNING -->
+    <div class="tab-content" id="tab3">
+      <div class="card">
+        <h2>📅 Planning modifiable</h2>
+        <p class="hint">✏️ Modifiez les dates de début/fin dans le tableau ci-dessous, puis cliquez sur "Appliquer" pour mettre à jour le Gantt.</p>
+        <div class="table-wrapper">
+          <table class="table" id="tablePlanning"></table>
+        </div>
+        <button class="btn-secondary" id="btnApplyPlanning" style="margin-top:16px;">✅ Appliquer les dates au Gantt</button>
+      </div>
+
+      <div class="card">
+        <div class="card-header">
+          <h2>🗓️ Gantt — Calendrier des sous-projets</h2>
+          <div class="card-actions">
+            <button class="btn-export-sm" onclick="exportChartAsPNG('chartGantt', 'gantt')">🖼️ PNG</button>
+          </div>
+        </div>
+        <p class="hint">📊 Visualisation des phases Budget, AT et Réel pour chaque sous-projet SIA 5.</p>
+        <div class="chart-wrapper-gantt">
+          <canvas id="chartGantt"></canvas>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- ===== FOOTER ===== -->
+  <footer>
+    <p>&copy; 2026 Groupe E Celsius — Dashboard CAD v4.4 (SIA 5)</p>
+  </footer>
+
   <script src="script.js"></script>
+  <script>
+    function exportTableToExcel(tableId, filename) {
+      const wb = XLSX.utils.book_new();
+      const table = document.querySelector(`#${tableId} table`);
+      const ws = XLSX.utils.table_to_sheet(table);
+      XLSX.utils.book_append_sheet(wb, ws, 'Data');
+      XLSX.writeFile(wb, `${filename}.xlsx`);
+    }
+
+    function exportChartAsPNG(chartId, filename) {
+      const canvas = document.getElementById(chartId);
+      const url = canvas.toDataURL('image/png');
+      const a = document.createElement('a');
+      a.download = `${filename}.png`;
+      a.href = url;
+      a.click();
+    }
+  </script>
 </body>
 </html>
