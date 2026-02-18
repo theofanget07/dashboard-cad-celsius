@@ -1,24 +1,33 @@
 /* ============================================================
    Dashboard CAD — Groupe E Celsius
-   script.js v5.0 — Multi-phase SIA 2/3/4/5
-   Architecture: mono-fichier modulaire
-   Données: Prevision_*.xlsx + Transactions-de-projet_*.xlsx
+   script.js v5.0 — 18/02/2026
+   Multi-phase SIA 2/3/4/5 — Corrections complètes
    ============================================================ */
 
-'use strict';
-
-// ═══════════════════════════════════════════════════════════
+// ============================================================
 // GLOBALS
-// ═══════════════════════════════════════════════════════════
+// ============================================================
 let prevRows = [], realRows = [];
-let manualPlanningDates = {};
+const charts = {}; // Stockage centralisé Chart.js : destroy avant recréation
+let manualPlanningDates = {}; // Dates éditées manuellement dans le tableau planning
 
-// Registre centralisé des instances Chart.js
-const charts = {};
+// ---- Palette Groupe E ----
+const GE_BLUE   = '#163a5f';
+const GE_BLUE2  = '#1e4d8c';
+const GE_BLUE3  = '#2e6db4';
+const GE_BLUE4  = '#5b9bd5';
+const GE_ORANGE = '#e8873a';
+const GE_RED    = '#c0392b';
+const GE_GREEN  = '#27ae60';
 
-// ═══════════════════════════════════════════════════════════
-// CONSTANTES MÉTIER
-// ═══════════════════════════════════════════════════════════
+// Camembert : 12 couleurs distinctes garanties
+const PIE_COLORS = [
+  '#2e6db4','#e8873a','#27ae60','#8e44ad',
+  '#c0392b','#16a085','#d4ac0d','#2980b9',
+  '#e74c3c','#1abc9c','#f39c12','#7f8c8d'
+];
+
+// SIA 5 — 6 sous-projets connus
 const PROJECT_NAMES = {
   'CL150096_11_05_01': 'Général - Direction',
   'CL150096_11_05_02': 'Centrale',
@@ -30,39 +39,19 @@ const PROJECT_NAMES = {
 const PROJECT_ORDER = Object.keys(PROJECT_NAMES);
 const getPN = id => PROJECT_NAMES[id] || id;
 
-// Labels phases SIA
-const PHASE_LABELS = {
-  'SIA2': { label: 'SIA 2 — Avant-Projet',         color: '#2e6db4', emoji: '🔷' },
-  'SIA3': { label: 'SIA 3 — Projet de Réalisation', color: '#e8873a', emoji: '🔶' },
-  'SIA4': { label: 'SIA 4 — Appels d\'Offres',       color: '#5b9bd5', emoji: '🔵' },
-  'SIA5': { label: 'SIA 5 — Réalisation',            color: '#27ae60', emoji: '🟢' }
-};
+// Mapping phases
+const PHASE_CODES = { 'SIA2':'02', 'SIA3':'03', 'SIA4':'04', 'SIA5':'05' };
 
-// Palette Groupe E
-const GE_BLUE   = '#163a5f';
-const GE_BLUE2  = '#1e4d8c';
-const GE_BLUE3  = '#2e6db4';
-const GE_BLUE4  = '#5b9bd5';
-const GE_ORANGE = '#e8873a';
-const GE_RED    = '#c0392b';
-const GE_GREEN  = '#27ae60';
-const PIE_COLORS = ['#2e6db4','#e8873a','#27ae60','#8e44ad','#c0392b','#16a085','#f39c12','#2980b9'];
-
-// ═══════════════════════════════════════════════════════════
-// UTILITAIRES
-// ═══════════════════════════════════════════════════════════
+// ============================================================
+// UTILS
+// ============================================================
 
 function readExcel(file, cb) {
   const r = new FileReader();
   r.onload = e => {
-    try {
-      const wb = XLSX.read(new Uint8Array(e.target.result), { type: 'array' });
-      const sheet = wb.Sheets[wb.SheetNames[0]];
-      const rows = XLSX.utils.sheet_to_json(sheet, { raw: true, defval: '' });
-      cb(rows, null);
-    } catch(err) {
-      cb(null, err);
-    }
+    const wb = XLSX.read(new Uint8Array(e.target.result), { type: 'array' });
+    const sheet = wb.Sheets[wb.SheetNames[0]];
+    cb(XLSX.utils.sheet_to_json(sheet, { raw: true }));
   };
   r.readAsArrayBuffer(file);
 }
@@ -78,1374 +67,1604 @@ function toNum(v) {
 }
 
 function toCHF(n) {
-  return (n || 0).toLocaleString('fr-CH', { minimumFractionDigits: 0, maximumFractionDigits: 0 });
+  return (n || 0).toLocaleString('fr-CH', { minimumFractionDigits: 0 });
 }
 
 function toDate(v) {
-  if (!v && v !== 0) return null;
   if (v instanceof Date && !isNaN(v)) return v;
-  if (typeof v === 'number') {
-    // Numéro de série Excel (base 1899-12-30)
-    return new Date(Date.UTC(1899, 11, 30) + v * 86400000);
-  }
+  if (typeof v === 'number') return new Date(Date.UTC(1899, 11, 30) + v * 86400000);
   if (typeof v === 'string') {
     const cleaned = v.trim().replace(' 00:00:00','').replace('T00:00:00','');
-    if (!cleaned) return null;
     let d = new Date(cleaned);
     if (!isNaN(d)) return d;
-    // Format DD.MM.YYYY ou DD/MM/YYYY
-    const m = cleaned.match(/^(\d{1,2})[.\/-](\d{1,2})[.\/-](\d{2,4})$/);
-    if (m) {
-      const y = +m[3] < 100 ? 2000 + +m[3] : +m[3];
-      return new Date(y, +m[2]-1, +m[1]);
-    }
+    const m = cleaned.match(/^(\d{1,2})[./\-](\d{1,2})[./\-](\d{2,4})$/);
+    if (m) return new Date(+m[3] < 100 ? 2000 + +m[3] : +m[3], +m[2]-1, +m[1]);
   }
   return null;
 }
 
-// Normalise date au 1er du mois
-function firstOfMonth(d) {
-  return new Date(d.getFullYear(), d.getMonth(), 1);
+function toDateInput(d) {
+  if (!d) return '';
+  const dd = new Date(d);
+  if (isNaN(dd)) return '';
+  return `${dd.getFullYear()}-${String(dd.getMonth()+1).padStart(2,'0')}-${String(dd.getDate()).padStart(2,'0')}`;
 }
 
-// Format YYYY-MM
-function yyyymm(d) {
-  return `${d.getFullYear()}-${String(d.getMonth()+1).padStart(2,'0')}`;
+function firstOfMonth(d) { return new Date(d.getFullYear(), d.getMonth(), 1); }
+function yyyymm(d) { return `${d.getFullYear()}-${String(d.getMonth()+1).padStart(2,'0')}`; }
+function fmtMonth(mm) {
+  const [y, m] = mm.split('-');
+  const months = ['Jan','Fév','Mar','Avr','Mai','Juin','Juil','Août','Sep','Oct','Nov','Déc'];
+  return `${months[+m-1]} ${y}`;
 }
 
-// Construit axe temporel mensuel [min..max]
 function buildAxis(minD, maxD) {
-  const axis = [];
-  const c = firstOfMonth(new Date(minD));
-  const e = firstOfMonth(new Date(maxD));
-  while (c <= e) {
-    axis.push(yyyymm(c));
-    c.setMonth(c.getMonth() + 1);
-  }
+  const axis = [], c = firstOfMonth(new Date(minD)), e = firstOfMonth(new Date(maxD));
+  while (c <= e) { axis.push(yyyymm(c)); c.setMonth(c.getMonth()+1); }
   return axis;
 }
 
-// Calcule courbe sigmoïde cumulée (S-curve)
 function sCurve(total, axis, k, sIdx, eIdx) {
-  const N = axis.length;
-  const cum = Array(N).fill(null);
-  const L = eIdx - sIdx + 1;
+  const N = axis.length, cum = Array(N).fill(null), L = eIdx - sIdx + 1;
   if (L <= 0 || total === 0 || sIdx < 0 || eIdx < 0) return cum;
-  const s0 = 1 / (1 + Math.exp(-k * (0 - 0.5)));
-  const s1 = 1 / (1 + Math.exp(-k * (1 - 0.5)));
+  const s0 = 1/(1+Math.exp(-k*(0-0.5))), s1 = 1/(1+Math.exp(-k*(1-0.5)));
   for (let j = 0; j < L; j++) {
     const i = sIdx + j;
     if (i >= N) break;
-    const x = j / (L - 1 || 1);
-    const sx = 1 / (1 + Math.exp(-k * (x - 0.5)));
-    cum[i] = ((sx - s0) / (s1 - s0)) * total;
+    const x = j/(L-1||1), sx = 1/(1+Math.exp(-k*(x-0.5)));
+    cum[i] = ((sx-s0)/(s1-s0)) * total;
   }
   return cum;
 }
 
-// Retourne [sIdx, eIdx] dans l'axe pour un modèle donné
 function modelRange(rows, modelName, axis) {
   const filtered = rows.filter(r => r['Modèle de prévision'] === modelName);
-  if (!filtered.length) return [-1, -1];
-  const dates = filtered.flatMap(r => [
-    toDate(r['Date de début']),
-    toDate(r['Date de fin'])
-  ]).filter(Boolean);
+  const dates = filtered.flatMap(r => [toDate(r['Date de début']), toDate(r['Date de fin'])]).filter(Boolean);
   if (!dates.length) return [-1, -1];
-  const minD = new Date(Math.min(...dates.map(d => d.getTime())));
-  const maxD = new Date(Math.max(...dates.map(d => d.getTime())));
-  const mmMin = yyyymm(firstOfMonth(minD));
-  const mmMax = yyyymm(firstOfMonth(maxD));
-  let sIdx = axis.indexOf(mmMin);
-  let eIdx = axis.indexOf(mmMax);
+  const minD = new Date(Math.min(...dates)), maxD = new Date(Math.max(...dates));
+  const mmMin = yyyymm(firstOfMonth(minD)), mmMax = yyyymm(firstOfMonth(maxD));
+  let sIdx = axis.indexOf(mmMin), eIdx = axis.indexOf(mmMax);
   if (sIdx < 0) sIdx = axis.findIndex(m => m >= mmMin);
-  if (eIdx < 0) {
-    for (let i = axis.length - 1; i >= 0; i--) {
-      if (axis[i] <= mmMax) { eIdx = i; break; }
-    }
-  }
+  if (eIdx < 0) { for (let i = axis.length-1; i >= 0; i--) { if (axis[i] <= mmMax) { eIdx = i; break; } } }
   if (sIdx < 0) sIdx = 0;
-  if (eIdx < 0) eIdx = axis.length - 1;
+  if (eIdx < 0) eIdx = axis.length-1;
   return [sIdx, eIdx];
 }
 
-// Extraction phase depuis ID projet
-// "CL150096_11_02" → "SIA2", "CL150096_11_05_01" → "SIA5"
 function extractPhase(idProjet) {
   if (!idProjet) return null;
-  const s = String(idProjet).trim();
-  const parts = s.split('_');
+  const parts = String(idProjet).split('_');
   if (parts.length < 3) return null;
-  const code = parts[2]; // "02", "03", "04", "05"
-  const mapping = { '02': 'SIA2', '03': 'SIA3', '04': 'SIA4', '05': 'SIA5' };
+  const code = parts[2];
+  const mapping = { '02':'SIA2', '03':'SIA3', '04':'SIA4', '05':'SIA5' };
   return mapping[code] || null;
 }
 
-// Récupère la date d'une transaction (colonne "Date" dans Transactions, "Date du projet" sinon)
-function getRealDate(row) {
-  const raw = row['Date'] || row['Date du projet'] || row['date'] || '';
-  return toDate(raw);
+function isHonoraires(row) {
+  const task = String(row['Nom de la tâche'] || row['Nom de la tache'] || '').toLowerCase();
+  const type = String(row['Type de ressource'] || '').toLowerCase();
+  return task.includes('honorai') || task.includes('honor') || type.includes('honorai');
 }
 
-// Détruit un chart Chart.js existant avant recréation
+function isExternal(row) {
+  const fournisseur = row['Nom du fournisseur'] || row['Fournisseur'] || row['Nom Fournisseur'] || '';
+  const task = String(row['Nom de la tâche'] || row['Nom de la tache'] || '').toLowerCase();
+  return String(fournisseur).trim() !== '' || task.includes('externe');
+}
+
+function getTaskName(row) {
+  return String(row['Nom de la tâche'] || row['Nom de la tache'] || row['Tâche'] || row['Tache'] || 'Inconnu').trim();
+}
+
+function getDateReal(row) {
+  return toDate(row['Date'] || row['Date du projet'] || row['date'] || null);
+}
+
 function destroyChart(key) {
-  if (charts[key]) {
-    charts[key].destroy();
-    delete charts[key];
-  }
+  if (charts[key]) { try { charts[key].destroy(); } catch(e){} delete charts[key]; }
 }
 
-// Génère HTML d'une carte KPI
-function kpiCard(label, value, sub, colorClass = '') {
-  return `<div class="kpi-card ${colorClass}">
+function kpiCard(label, value, unit='CHF', cls='') {
+  return `<div class="kpi-card">
     <div class="kpi-label">${label}</div>
-    <div class="kpi-value ${value < 0 ? 'neg' : value > 0 && colorClass === 'kpi-red' ? 'pos' : ''}">${toCHF(value)} CHF</div>
-    <div class="kpi-sub">${sub || ''}</div>
+    <div class="kpi-value ${cls}">${value}</div>
+    <div class="kpi-unit">${unit}</div>
   </div>`;
 }
 
-// Affiche message vide dans un conteneur
-function showEmpty(containerId, msg) {
-  const el = document.getElementById(containerId);
-  if (el) el.innerHTML = `<div class="empty-state"><div class="icon">📭</div>${msg}</div>`;
-}
-
-// Loader overlay
-function showLoader(v) {
-  const el = document.getElementById('loaderOverlay');
-  if (el) el.classList.toggle('active', v);
-}
-
-// ═══════════════════════════════════════════════════════════
-// PLUGIN "AUJOURD'HUI" — Chart.js
-// ═══════════════════════════════════════════════════════════
+// ============================================================
+// PLUGIN : Ligne "Aujourd'hui"
+// ============================================================
 const todayLinePlugin = {
   id: 'todayLine',
   afterDatasetsDraw(ch, _args, opts) {
     if (!opts || !opts.label) return;
     const { ctx, chartArea: { top, bottom }, scales: { x } } = ch;
     const labels = ch.data.labels;
-    const toT = s => { const [y,m] = s.split('-'); return new Date(+y, +m-1, 1).getTime(); };
+    const toT = s => { const [y,m] = s.split('-'); return new Date(+y,+m-1,1).getTime(); };
     const t = toT(opts.label);
     let bi = 0, bd = Infinity;
-    labels.forEach((l, i) => {
-      const d = Math.abs(toT(l) - t);
-      if (d < bd) { bd = d; bi = i; }
-    });
+    labels.forEach((l,i) => { const d = Math.abs(toT(l)-t); if (d < bd) { bd=d; bi=i; } });
     const xp = x.getPixelForValue(bi);
     ctx.save();
-    ctx.strokeStyle = GE_RED;
-    ctx.lineWidth = 2;
-    ctx.setLineDash([5, 5]);
+    ctx.strokeStyle = GE_RED; ctx.lineWidth = 2; ctx.setLineDash([5,5]);
     ctx.beginPath(); ctx.moveTo(xp, top); ctx.lineTo(xp, bottom); ctx.stroke();
     ctx.setLineDash([]);
-    ctx.fillStyle = GE_RED;
-    ctx.font = 'bold 11px Arial';
-    ctx.textAlign = 'center';
-    ctx.fillText("Aujourd'hui", xp, top - 5);
+    ctx.fillStyle = GE_RED; ctx.font = 'bold 11px Arial'; ctx.textAlign = 'center';
+    ctx.fillText("Aujourd'hui", xp, top-5);
     ctx.restore();
   }
 };
 Chart.register(todayLinePlugin);
 
-// ═══════════════════════════════════════════════════════════
-// INITIALISATION DOM + EVENTS
-// ═══════════════════════════════════════════════════════════
+// ============================================================
+// EVENTS
+// ============================================================
 document.addEventListener('DOMContentLoaded', () => {
 
-  // Loader overlay dans le body
-  const loaderDiv = document.createElement('div');
-  loaderDiv.id = 'loaderOverlay';
-  loaderDiv.className = 'loader-overlay';
-  loaderDiv.innerHTML = '<div class="loader-box"><div class="loader-spinner"></div><div>Calcul en cours...</div></div>';
-  document.body.appendChild(loaderDiv);
-
-  // ── Navigation onglets principaux ──
+  // Tabs
   document.querySelectorAll('.tab-btn').forEach(btn => {
     btn.addEventListener('click', () => {
       document.querySelectorAll('.tab-btn').forEach(b => b.classList.remove('active'));
-      document.querySelectorAll('.tab-content').forEach(t => t.classList.remove('active'));
+      document.querySelectorAll('.tab-content').forEach(c => c.classList.remove('active'));
       btn.classList.add('active');
-      const tab = document.getElementById('tab-' + btn.dataset.tab);
-      if (tab) tab.classList.add('active');
+      document.getElementById(btn.dataset.tab).classList.add('active');
     });
   });
 
-  // ── Navigation sous-onglets SIA 5 ──
-  document.querySelectorAll('.sub-tab-btn').forEach(btn => {
+  // Sous-onglets SIA 5
+  document.querySelectorAll('.subtab-btn').forEach(btn => {
     btn.addEventListener('click', () => {
-      document.querySelectorAll('.sub-tab-btn').forEach(b => b.classList.remove('active'));
-      document.querySelectorAll('.sub-tab-content').forEach(t => t.classList.remove('active'));
+      document.querySelectorAll('.subtab-btn').forEach(b => b.classList.remove('active'));
+      document.querySelectorAll('.subtab-content').forEach(c => c.classList.remove('active'));
       btn.classList.add('active');
-      const sub = document.getElementById(btn.dataset.subtab);
-      if (sub) sub.classList.add('active');
+      document.getElementById(btn.dataset.subtab).classList.add('active');
     });
   });
 
-  // ── Upload fichiers ──
+  // Upload
   document.getElementById('prevFile').addEventListener('change', e => {
-    const f = e.target.files[0];
-    if (!f) return;
-    showLoader(true);
-    readExcel(f, (rows, err) => {
-      showLoader(false);
-      if (err || !rows) { setStatus('❌ Erreur lecture prévisions : ' + (err?.message || ''), 'error'); return; }
+    if (e.target.files[0]) readExcel(e.target.files[0], rows => {
       prevRows = rows;
-      document.getElementById('prevStatus').textContent = `✅ ${rows.length} lignes chargées`;
-      setStatus(`✅ Prévisions : ${rows.length} lignes`);
+      document.getElementById('status').textContent = `✅ Prévisions chargées (${rows.length} lignes)`;
       maybeProcess();
     });
   });
-
   document.getElementById('realFile').addEventListener('change', e => {
-    const f = e.target.files[0];
-    if (!f) return;
-    showLoader(true);
-    readExcel(f, (rows, err) => {
-      showLoader(false);
-      if (err || !rows) { setStatus('❌ Erreur lecture réalisations : ' + (err?.message || ''), 'error'); return; }
+    if (e.target.files[0]) readExcel(e.target.files[0], rows => {
       realRows = rows;
-      document.getElementById('realStatus').textContent = `✅ ${rows.length} lignes chargées`;
-      setStatus(`✅ Réalisations : ${rows.length} lignes`);
+      document.getElementById('status').textContent = `✅ Réalisations chargées (${rows.length} lignes)`;
       maybeProcess();
     });
   });
 
-  // ── Slider coef k ──
-  const kSlider = document.getElementById('coefK');
-  const kNumber = document.getElementById('coefK_num');
-  [kSlider, kNumber].forEach(el => {
-    el.addEventListener('input', () => {
-      kSlider.value = kNumber.value = el.value;
+  // k coefficient
+  ['coefK','coefK_num'].forEach(id => {
+    document.getElementById(id).addEventListener('input', function() {
+      document.getElementById('coefK').value = this.value;
+      document.getElementById('coefK_num').value = this.value;
       if (prevRows.length && realRows.length) processAll();
     });
   });
 
-  // ── Vue globale / S uniquement ──
-  ['viewGlobal', 'viewSOnly'].forEach(id => {
+  // Vue
+  ['viewGlobal','viewSOnly'].forEach(id => {
     document.getElementById(id).addEventListener('change', () => {
       if (prevRows.length && realRows.length) processAll();
     });
   });
 
-  // ── Bouton recalcul Gantt ──
-  document.getElementById('btnApplyPlanning').addEventListener('click', () => {
-    if (!prevRows.length || !realRows.length) return;
-    PROJECT_ORDER.forEach(id => {
-      const s = document.getElementById(`rs_${id}`);
-      const e = document.getElementById(`re_${id}`);
-      if (!manualPlanningDates[id]) manualPlanningDates[id] = {};
-      manualPlanningDates[id].start = s?.value ? new Date(s.value) : null;
-      manualPlanningDates[id].end   = e?.value ? new Date(e.value) : null;
-    });
-    processPlanning();
+  // Recalc Gantt SIA5 depuis tableau
+  document.getElementById('btnRecalcGantt').addEventListener('click', () => {
+    collectManualDates();
+    processPlanningSIA5();
   });
 
-  // ── Export PDF ──
+  // PDF
   document.getElementById('btnPDF').addEventListener('click', generatePDF);
 });
 
-// ── Helpers status bar ──
-function setStatus(msg, type) {
-  const el = document.getElementById('status');
-  if (!el) return;
-  el.textContent = msg;
-  el.className = 'status-bar' + (type === 'error' ? ' status-error' : type === 'ok' ? ' status-ok' : '');
-}
-
 function maybeProcess() {
   if (prevRows.length && realRows.length) {
-    setStatus('⚙️ Calcul en cours...');
+    const s = document.getElementById('status');
+    s.textContent = '⏳ Calcul en cours...';
+    s.className = 'status';
     setTimeout(() => {
-      try {
-        processAll();
-        setStatus(`✅ Données chargées — ${prevRows.length} prévisions / ${realRows.length} transactions`, 'ok');
-      } catch(e) {
-        setStatus('❌ Erreur : ' + e.message, 'error');
-        console.error(e);
-      }
+      processAll();
+      s.textContent = '✅ Dashboard mis à jour avec succès.';
+      s.className = 'status success';
     }, 50);
   }
 }
 
-// ═══════════════════════════════════════════════════════════
-// ORCHESTRATEUR PRINCIPAL
-// ═══════════════════════════════════════════════════════════
 function processAll() {
   processRecap();
-  processPhase('SIA2', '02');
-  processPhase('SIA3', '03');
-  processPhase('SIA4', '04');
-  processSIA5Budgets();
-  processImputations();
-  processPlanning();
+  processPhase('SIA2','02');
+  processPhase('SIA3','03');
+  processPhase('SIA4','04');
+  processSIA5Budget();
+  processSIA5Imputations();
+  processPlanningSIA5();
 }
 
-// ═══════════════════════════════════════════════════════════
-// ONGLET RÉCAPITULATIF
-// ═══════════════════════════════════════════════════════════
-function processRecap() {
-  const phases = ['SIA2', 'SIA3', 'SIA4', 'SIA5'];
-  const phaseData = {};
-  const today = new Date();
-  const mmToday = yyyymm(today);
-
-  phases.forEach(ph => {
-    const code = ph.replace('SIA','').padStart(2,'0');
-    const pRows = prevRows.filter(r => {
-      const id = String(r['ID projet'] || '');
-      const parts = id.split('_');
-      return parts.length >= 3 && parts[2] === code;
-    });
-    const rRows = realRows.filter(r => {
-      const id = String(r['ID projet'] || '');
-      const parts = id.split('_');
-      return parts.length >= 3 && parts[2] === code;
-    });
-
-    const totalBudget  = pRows.filter(r => r['Modèle de prévision'] === 'Budget')
-                              .reduce((a,r) => a + toNum(r['Montant total du coût']), 0);
-    const totalBR      = pRows.filter(r => r['Modèle de prévision'] === 'Budget_Rev')
-                              .reduce((a,r) => a + toNum(r['Montant total du coût']), 0);
-    const totalAT      = pRows.filter(r => r['Modèle de prévision'] === 'AT')
-                              .reduce((a,r) => a + toNum(r['Montant total du coût']), 0);
-    const totalReal    = rRows.reduce((a,r) => {
-      const d = getRealDate(r);
-      if (!d || yyyymm(d) > mmToday) return a;
-      return a + toNum(r['Montant total du coût']);
-    }, 0);
-
-    phaseData[ph] = {
-      label:   PHASE_LABELS[ph].label,
-      budget:  totalBudget,
-      br:      totalBR,
-      at:      totalAT,
-      reel:    totalReal,
-      ecartBR: totalReal - totalBR,
-      ecartAT: totalReal - totalAT,
-      pctBR:   totalBR > 0 ? ((totalReal / totalBR) * 100).toFixed(1) : 0
-    };
+// ============================================================
+// FILTRAGES PAR PHASE
+// ============================================================
+function filterPrevByPhase(code) {
+  return prevRows.filter(r => {
+    const id = String(r['ID projet'] || r['ID Projet'] || '');
+    const parts = id.split('_');
+    return parts.length >= 3 && parts[2] === code;
   });
-
-  // KPIs globaux
-  const totBR   = phases.reduce((a,p) => a + phaseData[p].br, 0);
-  const totAT   = phases.reduce((a,p) => a + phaseData[p].at, 0);
-  const totReal = phases.reduce((a,p) => a + phaseData[p].reel, 0);
-  const totEcart = totReal - totAT;
-
-  const kpiEl = document.getElementById('kpiSectionRecap');
-  kpiEl.style.display = 'grid';
-  kpiEl.innerHTML =
-    kpiCard('Budget Révisé Total', totBR, 'Toutes phases', 'kpi-orange') +
-    kpiCard('AT Total', totAT, 'Toutes phases', 'kpi-blue2') +
-    kpiCard('Réel Total', totReal, 'Imputations cumulées', '') +
-    kpiCard('Écart vs AT', totEcart, `${totAT > 0 ? ((totReal/totAT)*100).toFixed(1) : 0}% d'avancement`, totEcart <= 0 ? 'kpi-green' : 'kpi-red');
-
-  // Tableau comparatif
-  const table = document.getElementById('tableRecap');
-  table.innerHTML = `<thead><tr>
-    <th>Phase</th>
-    <th class="num">Budget Initial</th>
-    <th class="num">Budget Révisé</th>
-    <th class="num">AT</th>
-    <th class="num">Réel</th>
-    <th class="num">Écart BR</th>
-    <th class="num">Écart AT</th>
-    <th class="num">% BR</th>
-  </tr></thead><tbody>` +
-    phases.map(ph => {
-      const d = phaseData[ph];
-      const eBRcls = d.ecartBR <= 0 ? 'green' : 'red';
-      const eATcls = d.ecartAT <= 0 ? 'green' : 'red';
-      return `<tr>
-        <td class="bold">${PHASE_LABELS[ph].emoji} ${d.label}</td>
-        <td class="num">${toCHF(d.budget)}</td>
-        <td class="num">${toCHF(d.br)}</td>
-        <td class="num">${toCHF(d.at)}</td>
-        <td class="num">${toCHF(d.reel)}</td>
-        <td class="num ${eBRcls}">${d.ecartBR >= 0 ? '+' : ''}${toCHF(d.ecartBR)}</td>
-        <td class="num ${eATcls}">${d.ecartAT >= 0 ? '+' : ''}${toCHF(d.ecartAT)}</td>
-        <td class="num">${d.pctBR}%</td>
-      </tr>`;
-    }).join('') +
-    `<tr class="bold" style="background:#edf2f7;border-top:2px solid #163a5f">
-      <td class="bold">TOTAL</td>
-      <td class="num">${toCHF(phases.reduce((a,p)=>a+phaseData[p].budget,0))}</td>
-      <td class="num">${toCHF(totBR)}</td>
-      <td class="num">${toCHF(totAT)}</td>
-      <td class="num">${toCHF(totReal)}</td>
-      <td class="num ${totReal-totBR<=0?'green':'red'}">${totReal-totBR>=0?'+':''}${toCHF(totReal-totBR)}</td>
-      <td class="num ${totEcart<=0?'green':'red'}">${totEcart>=0?'+':''}${toCHF(totEcart)}</td>
-      <td class="num">${totAT>0?((totReal/totAT)*100).toFixed(1):0}%</td>
-    </tr>` +
-  `</tbody>`;
-
-  // Graphique barres groupées par phase
-  destroyChart('recapBar');
-  const ctxBar = document.getElementById('chartRecapBar');
-  if (ctxBar) {
-    charts.recapBar = new Chart(ctxBar, {
-      type: 'bar',
-      data: {
-        labels: phases.map(p => PHASE_LABELS[p].label.split('—')[0].trim()),
-        datasets: [
-          { label: 'Budget Révisé', data: phases.map(p => phaseData[p].br), backgroundColor: GE_ORANGE, borderRadius: 5 },
-          { label: 'AT',            data: phases.map(p => phaseData[p].at), backgroundColor: GE_BLUE2, borderRadius: 5 },
-          { label: 'Réel',          data: phases.map(p => phaseData[p].reel), backgroundColor: GE_GREEN, borderRadius: 5 }
-        ]
-      },
-      options: {
-        responsive: true, maintainAspectRatio: false,
-        plugins: { legend: { position: 'top' } },
-        scales: {
-          y: { ticks: { callback: v => toCHF(v) + ' CHF' }, grid: { color: '#e2e8f0' } },
-          x: { grid: { display: false } }
-        }
-      }
-    });
-  }
-
-  // Camembert AT global
-  destroyChart('recapPie');
-  const ctxPie = document.getElementById('chartRecapPie');
-  const nonZeroPhases = phases.filter(p => phaseData[p].at > 0);
-  if (ctxPie && nonZeroPhases.length > 0) {
-    charts.recapPie = new Chart(ctxPie, {
-      type: 'doughnut',
-      data: {
-        labels: nonZeroPhases.map(p => PHASE_LABELS[p].emoji + ' ' + PHASE_LABELS[p].label.split('—')[0].trim()),
-        datasets: [{
-          data: nonZeroPhases.map(p => phaseData[p].at),
-          backgroundColor: nonZeroPhases.map((_,i) => PIE_COLORS[i]),
-          borderWidth: 2, borderColor: '#fff'
-        }]
-      },
-      options: {
-        responsive: true, maintainAspectRatio: false,
-        plugins: {
-          legend: { position: 'right' },
-          tooltip: { callbacks: { label: c => ` ${toCHF(c.parsed)} CHF` } }
-        }
-      }
-    });
-  }
 }
 
-// ═══════════════════════════════════════════════════════════
-// ONGLETS SIA 2 / 3 / 4 — GÉNÉRIQUE
-// ═══════════════════════════════════════════════════════════
-function processPhase(phaseName, phaseCode) {
+function filterRealByPhase(code) {
+  return realRows.filter(r => {
+    const id = String(r['ID projet'] || r['ID Projet'] || '');
+    const parts = id.split('_');
+    return parts.length >= 3 && parts[2] === code;
+  });
+}
+
+function getTasksFromPhase(pRows) {
+  // Regroupe par ID projet (ou nom de tâche pour SIA 2/3/4)
+  const tasks = {};
+  pRows.forEach(r => {
+    const id = String(r['ID projet'] || r['ID Projet'] || 'Inconnu');
+    const task = getTaskName(r);
+    const key = task; // Pour SIA 2/3/4, on group par tâche
+    if (!tasks[key]) tasks[key] = { id, task: key, rows: [] };
+    tasks[key].rows.push(r);
+  });
+  return Object.values(tasks);
+}
+
+// ============================================================
+// COURBES S GÉNÉRIQUES
+// ============================================================
+function buildSCurves(pRows, rRows) {
   const k = parseFloat(document.getElementById('coefK_num').value) || 12;
   const isSOnly = document.getElementById('viewSOnly').checked;
-  const today = new Date();
-  const mmToday = yyyymm(today);
-  const phaseId = phaseName.toLowerCase();
-
-  // Filtrage par phase
-  const pRows = prevRows.filter(r => {
-    const id = String(r['ID projet'] || '');
-    const parts = id.split('_');
-    return parts.length >= 3 && parts[2] === phaseCode;
-  });
-  const rRows = realRows.filter(r => {
-    const id = String(r['ID projet'] || '');
-    const parts = id.split('_');
-    return parts.length >= 3 && parts[2] === phaseCode;
-  });
-
-  const kpiEl = document.getElementById(`kpiSectionSIA${phaseCode.replace(/^0/,'')}`);
-
-  // Cas sans données
-  if (!pRows.length && !rRows.length) {
-    if (kpiEl) {
-      kpiEl.style.display = 'block';
-      kpiEl.innerHTML = `<div class="empty-state"><div class="icon">📭</div>Aucune donnée pour la phase ${phaseName}</div>`;
-    }
-    ['table', 'pie', 'bar'].forEach(t => {
-      const el = document.getElementById(`${t}SIA${phaseCode.replace(/^0/,'')}`);
-      if (el) el.innerHTML = '<div class="empty-state"><div class="icon">📭</div>Aucune donnée</div>';
-    });
-    return;
-  }
-
-  // ── Calcul totaux ──
-  const MODELS = ['Budget', 'Budget_Rev', 'AT'];
+  const MODELS = ['Budget','Budget_Rev','AT'];
   const model = {};
+
   MODELS.forEach(mn => {
     const rows = pRows.filter(r => r['Modèle de prévision'] === mn);
-    const total = rows.reduce((a, r) => a + toNum(r['Montant total du coût']), 0);
+    const total = rows.reduce((a,r) => a + toNum(r['Montant total du coût']), 0);
     const dates = rows.flatMap(r => [toDate(r['Date de début']), toDate(r['Date de fin'])]).filter(Boolean);
     model[mn] = {
       total,
-      start: dates.length ? new Date(Math.min(...dates.map(d=>d.getTime()))) : null,
-      end:   dates.length ? new Date(Math.max(...dates.map(d=>d.getTime()))) : null
+      start: dates.length ? new Date(Math.min(...dates)) : null,
+      end:   dates.length ? new Date(Math.max(...dates)) : null
     };
   });
 
-  // ── Axe temporel ──
+  const realDates = rRows.map(r => getDateReal(r)).filter(Boolean);
   const allDates = [];
-  MODELS.forEach(mn => {
-    if (model[mn].start) allDates.push(model[mn].start);
-    if (model[mn].end)   allDates.push(model[mn].end);
-  });
-  rRows.forEach(r => { const d = getRealDate(r); if (d) allDates.push(d); });
+  MODELS.forEach(mn => { if(model[mn].start) allDates.push(model[mn].start); if(model[mn].end) allDates.push(model[mn].end); });
+  realDates.forEach(d => allDates.push(d));
+  if (!allDates.length) return null;
 
-  if (!allDates.length) return;
-
-  const globalMin = new Date(Math.min(...allDates.map(d=>d.getTime())));
-  const globalMax = new Date(Math.max(...allDates.map(d=>d.getTime())));
-  const modelDates = MODELS.filter(m => model[m].start).flatMap(m => [model[m].start, model[m].end]).filter(Boolean);
-  const modelMin = modelDates.length ? new Date(Math.min(...modelDates.map(d=>d.getTime()))) : globalMin;
-  const modelMax = modelDates.length ? new Date(Math.max(...modelDates.map(d=>d.getTime()))) : globalMax;
-
-  const axisMin = isSOnly ? modelMin : globalMin;
-  const axisMax = isSOnly ? modelMax : globalMax;
+  const globalMin = new Date(Math.min(...allDates));
+  const globalMax = new Date(Math.max(...allDates));
+  const modelStartDates = MODELS.filter(mn => model[mn].start).map(mn => model[mn].start);
+  const modelEndDates   = MODELS.filter(mn => model[mn].end).map(mn => model[mn].end);
+  const modelMin = modelStartDates.length ? new Date(Math.min(...modelStartDates)) : globalMin;
+  const modelMax = modelEndDates.length   ? new Date(Math.max(...modelEndDates))   : globalMax;
+  const axisMin  = isSOnly ? modelMin : globalMin;
+  const axisMax  = isSOnly ? modelMax : globalMax;
   const axis = buildAxis(axisMin, axisMax);
 
-  // ── Courbes S ──
   const series = {};
   MODELS.forEach(mn => {
-    const [si, ei] = modelRange(pRows, mn, axis);
+    const filtered = pRows.filter(r => r['Modèle de prévision'] === mn);
+    const [si, ei] = modelRange(filtered.length ? filtered : pRows, mn, axis);
     series[mn] = sCurve(model[mn].total, axis, k, si, ei);
   });
 
-  // ── Réel cumulé ──
+  const today = new Date(), mmToday = yyyymm(today);
   const realMap = new Map(axis.map(m => [m, 0]));
   let initCum = 0;
   rRows.forEach(r => {
-    const d = getRealDate(r);
+    const d = getDateReal(r);
     if (!d) return;
     const mm = yyyymm(firstOfMonth(d));
     if (mm > mmToday) return;
     if (realMap.has(mm)) realMap.set(mm, realMap.get(mm) + toNum(r['Montant total du coût']));
     else if (isSOnly && mm < axis[0]) initCum += toNum(r['Montant total du coût']);
   });
-  const realMonth = axis.map(m => realMap.get(m) || 0);
+
   let acc = initCum;
-  const realCum = realMonth.map(v => { acc += v; return acc; });
-  const realCut = realCum.map((v, i) => axis[i] > mmToday ? null : v);
+  const realMonth = axis.map(m => realMap.get(m) || 0);
+  const realCum   = realMonth.map(v => { acc += v; return acc; });
+  const realCut   = realCum.map((v,i) => axis[i] > mmToday ? null : v);
 
-  // ── KPIs ──
-  const totalBR   = model['Budget_Rev'].total;
-  const totalAT   = model['AT'].total;
-  const totalReal = realCum[realCum.length - 1] || 0;
-  const ecartAT   = totalReal - totalAT;
-  const pctAT     = totalAT > 0 ? ((totalReal / totalAT) * 100).toFixed(1) : 0;
+  return { axis, series, realMonth, realCum, realCut, model, mmToday };
+}
 
-  if (kpiEl) {
-    kpiEl.style.display = 'grid';
-    kpiEl.innerHTML =
-      kpiCard('Budget Révisé', totalBR, PHASE_LABELS[phaseName].label, 'kpi-orange') +
-      kpiCard('AT', totalAT, PHASE_LABELS[phaseName].label, 'kpi-blue2') +
-      kpiCard('Réel', totalReal, 'Imputations cumulées', '') +
-      kpiCard('Écart vs AT', ecartAT, `${pctAT}% avancement`, ecartAT <= 0 ? 'kpi-green' : 'kpi-red');
+function drawSCurveChart(canvasId, data, title) {
+  destroyChart(canvasId);
+  if (!data) return;
+  const { axis, series, realCut, mmToday } = data;
+
+  // Masquer datasets à 0
+  const datasets = [];
+  if (series['Budget_Rev'] && series['Budget_Rev'].some(v => v !== null && v > 0)) {
+    datasets.push({
+      label: 'Budget Révisé (S)',
+      data: series['Budget_Rev'],
+      borderColor: GE_ORANGE, backgroundColor: GE_ORANGE+'22',
+      tension: 0.4, fill: false, borderWidth: 2.5,
+      pointRadius: 0, pointHoverRadius: 5
+    });
   }
+  if (series['AT'] && series['AT'].some(v => v !== null && v > 0)) {
+    datasets.push({
+      label: 'AT (S)',
+      data: series['AT'],
+      borderColor: GE_BLUE2, backgroundColor: GE_BLUE2+'22',
+      tension: 0.4, fill: false, borderWidth: 2.5,
+      borderDash: [8,4],
+      pointRadius: 0, pointHoverRadius: 5
+    });
+  }
+  if (realCut && realCut.some(v => v !== null && v > 0)) {
+    datasets.push({
+      label: 'Réel cumulé',
+      data: realCut,
+      borderColor: GE_RED, backgroundColor: GE_RED+'33',
+      tension: 0.1, fill: false, borderWidth: 3,
+      pointRadius: 2, pointHoverRadius: 6
+    });
+  }
+  if (!datasets.length) return;
 
-  // ── Courbe S Chart.js ──
-  const chartKey = 'chart' + phaseName;
-  destroyChart(chartKey);
-  const canvasId = 'chart' + phaseName;
   const ctx = document.getElementById(canvasId);
-  if (ctx) {
-    charts[chartKey] = new Chart(ctx, {
-      type: 'line',
-      data: {
-        labels: axis,
-        datasets: [
-          {
-            label: 'Budget Révisé (S)',
-            data: series['Budget_Rev'],
-            borderColor: GE_ORANGE, backgroundColor: GE_ORANGE + '22',
-            tension: 0.4, pointRadius: 0, borderWidth: 2, fill: false, spanGaps: true
-          },
-          {
-            label: 'AT (S)',
-            data: series['AT'],
-            borderColor: GE_BLUE, backgroundColor: GE_BLUE + '22',
-            tension: 0.4, pointRadius: 0, borderWidth: 2, fill: false, spanGaps: true
-          },
-          {
-            label: 'Réel cumulé',
-            data: realCut,
-            borderColor: GE_RED, backgroundColor: GE_RED + '22',
-            tension: 0.2, pointRadius: 2, borderWidth: 2.5, fill: false, spanGaps: false
-          }
-        ]
+  if (!ctx) return;
+  charts[canvasId] = new Chart(ctx, {
+    type: 'line',
+    data: { labels: axis.map(fmtMonth), datasets },
+    options: {
+      responsive: true, maintainAspectRatio: false,
+      plugins: {
+        legend: { position: 'top', labels: { font: { size: 12 }, usePointStyle: true } },
+        title: { display: false },
+        todayLine: { label: mmToday }
       },
-      options: {
-        responsive: true, maintainAspectRatio: false,
-        interaction: { mode: 'index', intersect: false },
-        plugins: {
-          legend: { position: 'top' },
-          todayLine: { label: mmToday },
-          tooltip: {
-            callbacks: {
-              label: c => ` ${c.dataset.label}: ${toCHF(c.parsed.y)} CHF`
-            }
-          }
-        },
-        scales: {
-          y: {
-            ticks: { callback: v => toCHF(v) + ' CHF' },
-            grid: { color: '#e2e8f0' }
-          },
-          x: { grid: { color: '#f0f4f8' } }
+      scales: {
+        x: { ticks: { maxRotation: 45, font: { size: 10 } }, grid: { color: '#e8eef5' } },
+        y: {
+          ticks: { callback: v => toCHF(v), font: { size: 10 } },
+          grid: { color: '#e8eef5' }
         }
       }
-    });
-  }
-
-  // ── Tableau budgets par ID Projet ──
-  const tableEl = document.getElementById(`tableSIA${phaseCode.replace(/^0/,'')}`);
-  if (tableEl) {
-    const idSet = [...new Set(pRows.map(r => r['ID projet']))];
-    tableEl.innerHTML = `<thead><tr>
-      <th>ID Projet</th>
-      <th>Nom de la tâche</th>
-      <th class="num">Budget</th>
-      <th class="num">Budget Révisé</th>
-      <th class="num">AT</th>
-      <th class="num">Réel</th>
-      <th class="num">Écart BR</th>
-      <th class="num">Écart AT</th>
-    </tr></thead><tbody>` +
-    idSet.map(id => {
-      const rows = pRows.filter(r => r['ID projet'] === id);
-      const nomTache = rows[0]?.['Nom de la tâche'] || id;
-      const bgt = rows.filter(r => r['Modèle de prévision']==='Budget').reduce((a,r)=>a+toNum(r['Montant total du coût']),0);
-      const br  = rows.filter(r => r['Modèle de prévision']==='Budget_Rev').reduce((a,r)=>a+toNum(r['Montant total du coût']),0);
-      const at  = rows.filter(r => r['Modèle de prévision']==='AT').reduce((a,r)=>a+toNum(r['Montant total du coût']),0);
-      const reel = rRows.filter(r => String(r['ID projet']) === String(id)).reduce((a,r)=>a+toNum(r['Montant total du coût']),0);
-      const eBR = reel - br, eAT = reel - at;
-      return `<tr>
-        <td><code>${id}</code></td>
-        <td>${nomTache}</td>
-        <td class="num">${toCHF(bgt)}</td>
-        <td class="num">${toCHF(br)}</td>
-        <td class="num">${toCHF(at)}</td>
-        <td class="num">${toCHF(reel)}</td>
-        <td class="num ${eBR<=0?'green':'red'}">${eBR>=0?'+':''}${toCHF(eBR)}</td>
-        <td class="num ${eAT<=0?'green':'red'}">${eAT>=0?'+':''}${toCHF(eAT)}</td>
-      </tr>`;
-    }).join('') + '</tbody>';
-  }
-
-  // ── Camembert BR ──
-  const pieKey = 'pie' + phaseName + 'BR';
-  destroyChart(pieKey);
-  const pieBRCanvas = document.getElementById(`pieSIA${phaseCode.replace(/^0/,'')}BR`);
-  const idSet2 = [...new Set(pRows.map(r => r['ID projet']))];
-  const pieLabels = idSet2.map(id => {
-    const rows = pRows.filter(r => r['ID projet']===id);
-    return rows[0]?.['Nom de la tâche'] || id;
+    }
   });
-  const pieDataBR = idSet2.map(id =>
-    pRows.filter(r => r['ID projet']===id && r['Modèle de prévision']==='Budget_Rev')
-         .reduce((a,r)=>a+toNum(r['Montant total du coût']),0)
-  );
-  if (pieBRCanvas && pieDataBR.some(v => v !== 0)) {
-    charts[pieKey] = new Chart(pieBRCanvas, {
-      type: 'doughnut',
-      data: {
-        labels: pieLabels,
-        datasets: [{ data: pieDataBR, backgroundColor: PIE_COLORS, borderWidth: 2, borderColor: '#fff' }]
-      },
-      options: {
-        responsive: true, maintainAspectRatio: false,
-        plugins: {
-          legend: { position: 'right', labels: { font: { size: 11 } } },
-          tooltip: { callbacks: { label: c => ` ${toCHF(c.parsed)} CHF` } }
-        }
-      }
-    });
-  }
+}
 
-  // ── Barre avancement ──
-  const barKey = 'bar' + phaseName;
-  destroyChart(barKey);
-  const barCanvas = document.getElementById(`barSIA${phaseCode.replace(/^0/,'')}`);
-  const barLabels = idSet2.map(id => {
-    const rows = pRows.filter(r => r['ID projet']===id);
-    const nom = rows[0]?.['Nom de la tâche'] || id;
-    return nom.length > 25 ? nom.substring(0,22)+'...' : nom;
+// ============================================================
+// ONGLET RÉCAPITULATIF
+// ============================================================
+function processRecap() {
+  const phases = [
+    { name: 'SIA 2', code: '02', color: GE_BLUE4 },
+    { name: 'SIA 3', code: '03', color: GE_BLUE3 },
+    { name: 'SIA 4', code: '04', color: GE_BLUE2 },
+    { name: 'SIA 5', code: '05', color: GE_BLUE  }
+  ];
+  const today = new Date(), mmToday = yyyymm(today);
+
+  const summaries = phases.map(ph => {
+    const pRows = filterPrevByPhase(ph.code);
+    const rRows = filterRealByPhase(ph.code);
+    const budget   = pRows.filter(r => r['Modèle de prévision']==='Budget').reduce((a,r) => a+toNum(r['Montant total du coût']),0);
+    const budgetRev= pRows.filter(r => r['Modèle de prévision']==='Budget_Rev').reduce((a,r) => a+toNum(r['Montant total du coût']),0);
+    const at       = pRows.filter(r => r['Modèle de prévision']==='AT').reduce((a,r) => a+toNum(r['Montant total du coût']),0);
+    const reel     = rRows.reduce((a,r) => a+toNum(r['Montant total du coût']),0);
+    const ecartBR  = reel - budgetRev;
+    const ecartAT  = reel - at;
+    const pctAT    = at > 0 ? (reel/at*100) : 0;
+
+    // Honoraires
+    const honorPRows = pRows.filter(r => isHonoraires(r));
+    const honorRRows = rRows.filter(r => isHonoraires(r));
+    const honorBR = honorPRows.filter(r => r['Modèle de prévision']==='Budget_Rev').reduce((a,r) => a+toNum(r['Montant total du coût']),0);
+    const honorAT = honorPRows.filter(r => r['Modèle de prévision']==='AT').reduce((a,r) => a+toNum(r['Montant total du coût']),0);
+    const honorReel = honorRRows.reduce((a,r) => a+toNum(r['Montant total du coût']),0);
+
+    // Planning : min/max dates
+    const allDates = [...pRows, ...rRows].flatMap(r => [toDate(r['Date de début']), toDate(r['Date de fin']), getDateReal(r)]).filter(Boolean);
+    const planStart = allDates.length ? new Date(Math.min(...allDates)) : null;
+    const planEnd   = allDates.length ? new Date(Math.max(...allDates)) : null;
+
+    return { ...ph, budget, budgetRev, at, reel, ecartBR, ecartAT, pctAT, honorBR, honorAT, honorReel, planStart, planEnd };
   });
-  const barAT   = idSet2.map(id => pRows.filter(r=>r['ID projet']===id&&r['Modèle de prévision']==='AT').reduce((a,r)=>a+toNum(r['Montant total du coût']),0));
-  const barReel = idSet2.map(id => rRows.filter(r=>String(r['ID projet'])===String(id)).reduce((a,r)=>a+toNum(r['Montant total du coût']),0));
-  if (barCanvas) {
-    charts[barKey] = new Chart(barCanvas, {
+
+  // === KPI RÉCAP BUDGET ===
+  const totalBR   = summaries.reduce((a,s) => a+s.budgetRev, 0);
+  const totalAT   = summaries.reduce((a,s) => a+s.at, 0);
+  const totalReel = summaries.reduce((a,s) => a+s.reel, 0);
+  const totalEcart= totalReel - totalAT;
+  const kpiEl = document.getElementById('recapBudgetKPI');
+  if (kpiEl) kpiEl.innerHTML =
+    kpiCard('Budget Révisé Total', toCHF(totalBR)) +
+    kpiCard('AT Total', toCHF(totalAT)) +
+    kpiCard('Réel Total', toCHF(totalReel)) +
+    kpiCard('Écart vs AT', (totalEcart>=0?'+':'')+toCHF(totalEcart), 'CHF', totalEcart>=0?'negative':'positive');
+
+  // === GRAPHIQUE RECAP BUDGET ===
+  destroyChart('recapBudgetChart');
+  const rcCtx = document.getElementById('recapBudgetChart');
+  if (rcCtx) {
+    const nonZero = summaries.filter(s => s.budgetRev > 0 || s.at > 0 || s.reel > 0);
+    charts['recapBudgetChart'] = new Chart(rcCtx, {
       type: 'bar',
       data: {
-        labels: barLabels,
+        labels: nonZero.map(s => s.name),
         datasets: [
-          { label: 'AT',   data: barAT,   backgroundColor: GE_BLUE2, borderRadius: 4 },
-          { label: 'Réel', data: barReel, backgroundColor: GE_RED,   borderRadius: 4 }
+          { label: 'Budget Révisé', data: nonZero.map(s=>s.budgetRev), backgroundColor: GE_ORANGE+'cc' },
+          { label: 'AT',            data: nonZero.map(s=>s.at),        backgroundColor: GE_BLUE2+'cc' },
+          { label: 'Réel',          data: nonZero.map(s=>s.reel),      backgroundColor: GE_RED+'cc' }
         ]
       },
       options: {
-        indexAxis: 'y',
         responsive: true, maintainAspectRatio: false,
-        plugins: { legend: { position: 'top' } },
-        scales: {
-          x: { ticks: { callback: v => toCHF(v) }, grid: { color: '#e2e8f0' } },
-          y: { grid: { display: false } }
-        }
+        plugins: { legend: { position:'top' } },
+        scales: { y: { ticks: { callback: v => toCHF(v) } } }
       }
     });
+    rcCtx.style.height = '300px';
+    rcCtx.parentElement.style.height = '320px';
+  }
+
+  // === TABLEAU RECAP BUDGET ===
+  const tbl = document.getElementById('recapBudgetTable');
+  if (tbl) {
+    let html = `<thead><tr>
+      <th>Phase</th><th>Budget</th><th>Budget Révisé</th><th>AT</th><th>Réel</th>
+      <th>Écart BR</th><th>Écart AT</th><th>% AT</th>
+    </tr></thead><tbody>`;
+    summaries.forEach(s => {
+      html += `<tr>
+        <td><strong>${s.name}</strong></td>
+        <td>${toCHF(s.budget)}</td><td>${toCHF(s.budgetRev)}</td><td>${toCHF(s.at)}</td><td>${toCHF(s.reel)}</td>
+        <td class="${s.ecartBR>=0?'negative':'positive'}">${(s.ecartBR>=0?'+':'')+toCHF(s.ecartBR)}</td>
+        <td class="${s.ecartAT>=0?'negative':'positive'}">${(s.ecartAT>=0?'+':'')+toCHF(s.ecartAT)}</td>
+        <td>${s.pctAT.toFixed(1)}%</td>
+      </tr>`;
+    });
+    const totEcartBR = summaries.reduce((a,s)=>a+s.ecartBR,0);
+    const totEcartAT = summaries.reduce((a,s)=>a+s.ecartAT,0);
+    html += `</tbody><tfoot><tr>
+      <td>TOTAL</td>
+      <td>${toCHF(summaries.reduce((a,s)=>a+s.budget,0))}</td>
+      <td>${toCHF(totalBR)}</td><td>${toCHF(totalAT)}</td><td>${toCHF(totalReel)}</td>
+      <td class="${totEcartBR>=0?'negative':'positive'}">${(totEcartBR>=0?'+':'')+toCHF(totEcartBR)}</td>
+      <td class="${totEcartAT>=0?'negative':'positive'}">${(totEcartAT>=0?'+':'')+toCHF(totEcartAT)}</td>
+      <td>${totalAT>0?(totalReel/totalAT*100).toFixed(1):0}%</td>
+    </tr></tfoot>`;
+    tbl.innerHTML = html;
+  }
+
+  // === KPI RECAP IMPUTATIONS ===
+  const totHonorBR   = summaries.reduce((a,s)=>a+s.honorBR,0);
+  const totHonorAT   = summaries.reduce((a,s)=>a+s.honorAT,0);
+  const totHonorReel = summaries.reduce((a,s)=>a+s.honorReel,0);
+  const kpiImpEl = document.getElementById('recapImputKPI');
+  if (kpiImpEl) kpiImpEl.innerHTML =
+    kpiCard('Honoraires BR', toCHF(totHonorBR)) +
+    kpiCard('Honoraires AT', toCHF(totHonorAT)) +
+    kpiCard('Honoraires Réel', toCHF(totHonorReel)) +
+    kpiCard('Écart Honor. AT', ((totHonorReel-totHonorAT)>=0?'+':'')+toCHF(totHonorReel-totHonorAT), 'CHF', (totHonorReel-totHonorAT)>=0?'negative':'positive');
+
+  // === GRAPHIQUE RECAP IMPUTATIONS ===
+  destroyChart('recapImputChart');
+  const riCtx = document.getElementById('recapImputChart');
+  if (riCtx) {
+    const nonZeroH = summaries.filter(s => s.honorBR>0 || s.honorAT>0 || s.honorReel>0);
+    charts['recapImputChart'] = new Chart(riCtx, {
+      type: 'bar',
+      data: {
+        labels: nonZeroH.map(s=>s.name),
+        datasets: [
+          { label: 'Honoraires BR', data: nonZeroH.map(s=>s.honorBR),   backgroundColor: GE_ORANGE+'cc' },
+          { label: 'Honoraires AT', data: nonZeroH.map(s=>s.honorAT),   backgroundColor: GE_BLUE2+'cc' },
+          { label: 'Réel',          data: nonZeroH.map(s=>s.honorReel), backgroundColor: GE_GREEN+'cc'  }
+        ]
+      },
+      options: {
+        responsive: true, maintainAspectRatio: false,
+        plugins: { legend: { position:'top' } },
+        scales: { y: { ticks: { callback: v => toCHF(v) } } }
+      }
+    });
+    riCtx.style.height = '300px';
+    riCtx.parentElement.style.height = '320px';
+  }
+
+  // === TABLEAU RECAP IMPUTATIONS ===
+  const tblI = document.getElementById('recapImputTable');
+  if (tblI) {
+    let html = `<thead><tr><th>Phase</th><th>Honoraires BR</th><th>Honoraires AT</th><th>Réel</th><th>Écart AT</th></tr></thead><tbody>`;
+    summaries.forEach(s => {
+      const ec = s.honorReel - s.honorAT;
+      html += `<tr><td><strong>${s.name}</strong></td><td>${toCHF(s.honorBR)}</td><td>${toCHF(s.honorAT)}</td><td>${toCHF(s.honorReel)}</td>
+        <td class="${ec>=0?'negative':'positive'}">${(ec>=0?'+':'')+toCHF(ec)}</td></tr>`;
+    });
+    html += `</tbody>`;
+    tblI.innerHTML = html;
+  }
+
+  // === GANTT GLOBAL ===
+  destroyChart('recapPlanningChart');
+  const ganttCtx = document.getElementById('recapPlanningChart');
+  if (ganttCtx) {
+    const validPhases = summaries.filter(s => s.planStart && s.planEnd);
+    if (validPhases.length) {
+      const allStart = new Date(Math.min(...validPhases.map(s=>s.planStart)));
+      const allEnd   = new Date(Math.max(...validPhases.map(s=>s.planEnd)));
+      const axis     = buildAxis(allStart, allEnd);
+      const bars     = validPhases.map(s => {
+        const si = axis.indexOf(yyyymm(firstOfMonth(s.planStart)));
+        const ei = axis.indexOf(yyyymm(firstOfMonth(s.planEnd)));
+        const base = si >= 0 ? si : 0;
+        const len  = ei >= si ? ei - si + 1 : 1;
+        return { label: s.name, base, len, color: s.color };
+      });
+      charts['recapPlanningChart'] = new Chart(ganttCtx, {
+        type: 'bar',
+        data: {
+          labels: validPhases.map(s=>s.name),
+          datasets: [
+            { label: 'Début', data: bars.map(b=>b.base), backgroundColor: 'transparent', borderWidth: 0 },
+            { label: 'Durée', data: bars.map(b=>b.len), backgroundColor: validPhases.map(s=>s.color+'cc'), borderRadius: 4 }
+          ]
+        },
+        options: {
+          indexAxis: 'y', responsive: true, maintainAspectRatio: false,
+          plugins: { legend: { display: false } },
+          scales: {
+            x: { stacked: true, ticks: { callback: v => axis[v] ? fmtMonth(axis[v]) : '' } },
+            y: { stacked: true }
+          }
+        }
+      });
+      ganttCtx.parentElement.style.height = `${Math.max(200, validPhases.length*80)}px`;
+    }
   }
 }
 
-// ═══════════════════════════════════════════════════════════
-// SIA 5 — BUDGETS (Rapport Financier)
-// ═══════════════════════════════════════════════════════════
-function processSIA5Budgets() {
+// ============================================================
+// PHASES SIA 2/3/4 — GÉNÉRIQUE
+// ============================================================
+function processPhase(phaseName, phaseCode) {
+  const pRows = filterPrevByPhase(phaseCode);
+  const rRows = filterRealByPhase(phaseCode);
+  const lower  = phaseName.toLowerCase(); // 'sia2', 'sia3', 'sia4'
+
+  if (!pRows.length && !rRows.length) {
+    const kpiEl = document.getElementById(`kpiSectionSIA${phaseCode.replace('0','')}`);
+    if (kpiEl) kpiEl.innerHTML = `<div class="hint">ℹ️ Aucune donnée pour ${phaseName}</div>`;
+    return;
+  }
+
+  const phaseNum = phaseCode.replace('0',''); // '2', '3', '4'
+
+  // === COURBES S ===
+  const sData = buildSCurves(pRows, rRows);
+  drawSCurveChart(`chart${phaseName}`, sData, phaseName);
+
+  // === KPIs ===
+  const budgetRev = pRows.filter(r => r['Modèle de prévision']==='Budget_Rev').reduce((a,r) => a+toNum(r['Montant total du coût']),0);
+  const at        = pRows.filter(r => r['Modèle de prévision']==='AT').reduce((a,r) => a+toNum(r['Montant total du coût']),0);
+  const reel      = rRows.reduce((a,r) => a+toNum(r['Montant total du coût']),0);
+  const ecart     = reel - at;
+  const pct       = at > 0 ? (reel/at*100).toFixed(1) : 0;
+
+  const kpiEl = document.getElementById(`kpiSection${phaseName}`);
+  if (kpiEl) kpiEl.innerHTML =
+    kpiCard('Budget Révisé', toCHF(budgetRev)) +
+    kpiCard('AT', toCHF(at)) +
+    kpiCard('Réel', toCHF(reel)) +
+    kpiCard('Écart vs AT', (ecart>=0?'+':'')+toCHF(ecart), 'CHF', ecart>=0?'negative':'positive') +
+    kpiCard('Avancement', `${pct}%`, '% AT', '');
+
+  // === TÂCHES (SIA 2/3/4 → par tâche) ===
+  // Collecte toutes les tâches distinctes
+  const taskMap = {};
+  pRows.forEach(r => {
+    const task   = getTaskName(r);
+    const model  = r['Modèle de prévision'];
+    const amount = toNum(r['Montant total du coût']);
+    if (!taskMap[task]) taskMap[task] = { task, budget:0, budgetRev:0, at:0, reel:0 };
+    if (model === 'Budget')     taskMap[task].budget += amount;
+    if (model === 'Budget_Rev') taskMap[task].budgetRev += amount;
+    if (model === 'AT')         taskMap[task].at += amount;
+  });
+  rRows.forEach(r => {
+    const task = getTaskName(r);
+    if (!taskMap[task]) taskMap[task] = { task, budget:0, budgetRev:0, at:0, reel:0 };
+    taskMap[task].reel += toNum(r['Montant total du coût']);
+  });
+  const taskList = Object.values(taskMap).filter(t => t.budget>0 || t.budgetRev>0 || t.at>0 || t.reel>0);
+
+  // === TABLEAU BUDGETS PAR TÂCHE ===
+  const tblBudget = document.getElementById(`table${phaseName}Budget`);
+  if (tblBudget) {
+    let html = `<thead><tr>
+      <th>Tâche</th><th>Budget</th><th>Budget Révisé</th><th>AT</th>
+      <th>Réel</th><th>Écart BR</th><th>Écart AT</th><th>% AT</th>
+    </tr></thead><tbody>`;
+    taskList.forEach(t => {
+      const eBR = t.reel - t.budgetRev, eAT = t.reel - t.at;
+      const pAT = t.at>0 ? (t.reel/t.at*100).toFixed(1) : '—';
+      html += `<tr>
+        <td><strong>${t.task}</strong></td>
+        <td>${toCHF(t.budget)}</td><td>${toCHF(t.budgetRev)}</td><td>${toCHF(t.at)}</td><td>${toCHF(t.reel)}</td>
+        <td class="${eBR>=0?'negative':'positive'}">${eBR!==0?(eBR>=0?'+':'')+toCHF(eBR):'—'}</td>
+        <td class="${eAT>=0?'negative':'positive'}">${eAT!==0?(eAT>=0?'+':'')+toCHF(eAT):'—'}</td>
+        <td>${pAT}%</td>
+      </tr>`;
+    });
+    html += `</tbody><tfoot><tr>
+      <td>TOTAL</td>
+      <td>${toCHF(taskList.reduce((a,t)=>a+t.budget,0))}</td>
+      <td>${toCHF(budgetRev)}</td><td>${toCHF(at)}</td><td>${toCHF(reel)}</td>
+      <td class="${(reel-budgetRev)>=0?'negative':'positive'}">${((reel-budgetRev)>=0?'+':'')+toCHF(reel-budgetRev)}</td>
+      <td class="${ecart>=0?'negative':'positive'}">${(ecart>=0?'+':'')+toCHF(ecart)}</td>
+      <td>${pct}%</td>
+    </tr></tfoot>`;
+    tblBudget.innerHTML = html;
+  }
+
+  // === CAMEMBERT BUDGET RÉVISÉ (filtrer 0, couleurs distinctes) ===
+  const pieBRId = `pie${phaseName}BR`;
+  destroyChart(pieBRId);
+  const pieBRCtx = document.getElementById(pieBRId);
+  if (pieBRCtx) {
+    const validTasks = taskList.filter(t => t.budgetRev > 0);
+    if (validTasks.length) {
+      charts[pieBRId] = new Chart(pieBRCtx, {
+        type: 'doughnut',
+        data: {
+          labels: validTasks.map(t => t.task),
+          datasets: [{
+            data: validTasks.map(t => t.budgetRev),
+            backgroundColor: validTasks.map((_,i) => PIE_COLORS[i % PIE_COLORS.length]),
+            borderWidth: 2, borderColor: '#fff'
+          }]
+        },
+        options: {
+          responsive: true, maintainAspectRatio: false,
+          plugins: {
+            legend: { position:'right', labels: { font:{size:11}, usePointStyle:true } },
+            tooltip: { callbacks: { label: ctx => ` ${ctx.label}: CHF ${toCHF(ctx.parsed)}` } }
+          }
+        }
+      });
+    } else {
+      pieBRCtx.parentElement.innerHTML += '<p class="hint">Aucune donnée Budget Révisé disponible.</p>';
+    }
+  }
+
+  // === BARRES AVANCEMENT PAR TÂCHE ===
+  const barId = `bar${phaseName}`;
+  destroyChart(barId);
+  const barCtx = document.getElementById(barId);
+  if (barCtx) {
+    const validBar = taskList.filter(t => t.at>0 || t.reel>0);
+    if (validBar.length) {
+      charts[barId] = new Chart(barCtx, {
+        type: 'bar',
+        data: {
+          labels: validBar.map(t => t.task.length>20 ? t.task.substring(0,20)+'…' : t.task),
+          datasets: [
+            { label:'AT',   data: validBar.map(t=>t.at),   backgroundColor: GE_BLUE2+'cc' },
+            { label:'Réel', data: validBar.map(t=>t.reel), backgroundColor: GE_RED+'cc' }
+          ]
+        },
+        options: {
+          indexAxis:'y', responsive:true, maintainAspectRatio:false,
+          plugins: { legend:{position:'top'} },
+          scales: { x:{ ticks:{ callback: v => toCHF(v) } } }
+        }
+      });
+    }
+  }
+
+  // === IMPUTATIONS HONORAIRES ===
+  processImputationsPhase(phaseName, phaseCode, pRows, rRows);
+
+  // === PLANNING ===
+  processPlanningPhase(phaseName, phaseCode, pRows, rRows);
+}
+
+// ============================================================
+// IMPUTATIONS PAR PHASE (SIA 2/3/4)
+// ============================================================
+function processImputationsPhase(phaseName, phaseCode, pRows, rRows) {
+  const phaseNum = phaseCode.replace('0','');
+
+  // Honoraires uniquement
+  const honorPrev = pRows.filter(r => isHonoraires(r));
+  const honorReal = rRows.filter(r => isHonoraires(r));
+
+  // Grouper par tâche + int/ext
+  const taskMap = {};
+  honorPrev.forEach(r => {
+    const task  = getTaskName(r);
+    const model = r['Modèle de prévision'];
+    const ext   = isExternal(r);
+    const key   = `${task}__${ext?'ext':'int'}`;
+    if (!taskMap[key]) taskMap[key] = { task, ext, br:0, at:0, reel:0 };
+    if (model==='Budget_Rev') taskMap[key].br += toNum(r['Montant total du coût']);
+    if (model==='AT')          taskMap[key].at += toNum(r['Montant total du coût']);
+  });
+  honorReal.forEach(r => {
+    const task = getTaskName(r);
+    const ext  = isExternal(r);
+    const key  = `${task}__${ext?'ext':'int'}`;
+    if (!taskMap[key]) taskMap[key] = { task, ext, br:0, at:0, reel:0 };
+    taskMap[key].reel += toNum(r['Montant total du coût']);
+  });
+
+  const items = Object.values(taskMap).filter(t => t.br>0 || t.at>0 || t.reel>0);
+  const intItems = items.filter(t => !t.ext);
+  const extItems = items.filter(t => t.ext);
+
+  // KPI
+  const totBR   = items.reduce((a,t) => a+t.br,   0);
+  const totAT   = items.reduce((a,t) => a+t.at,   0);
+  const totReel = items.reduce((a,t) => a+t.reel, 0);
+  const ecartAT = totReel - totAT;
+
+  const kpiImpEl = document.getElementById(`kpiSectionImpSIA${phaseNum}`);
+  if (kpiImpEl) kpiImpEl.innerHTML =
+    kpiCard('Honoraires BR', toCHF(totBR)) +
+    kpiCard('Honoraires AT', toCHF(totAT)) +
+    kpiCard('Réel Honoraires', toCHF(totReel)) +
+    kpiCard('Écart AT', (ecartAT>=0?'+':'')+toCHF(ecartAT), 'CHF', ecartAT>=0?'negative':'positive');
+
+  // Tableau
+  const tbl = document.getElementById(`tableImpSIA${phaseNum}`) || document.getElementById(`tableImput${phaseName}`);
+  if (!tbl) return;
+
+  let html = `<thead><tr>
+    <th>Tâche</th><th>Type</th><th>Budget Révisé</th><th>AT</th><th>Réel</th><th>Écart BR</th><th>Écart AT</th>
+  </tr></thead><tbody>`;
+
+  const renderSection = (list, type, cls, clsSub) => {
+    if (!list.length) return '';
+    let rows = `<tr class="${cls}"><td colspan="7">${type === 'int' ? '🔵 RESSOURCES INTERNES' : '🟡 RESSOURCES EXTERNES'}</td></tr>`;
+    let sBR=0, sAT=0, sReel=0;
+    list.forEach(t => {
+      const eBR = t.reel-t.br, eAT = t.reel-t.at;
+      sBR+=t.br; sAT+=t.at; sReel+=t.reel;
+      rows += `<tr class="${type==='int'?'row-int':'row-ext'}">
+        <td>${t.task}</td>
+        <td><span class="badge ${type==='int'?'prevu':'en-cours'}">${type==='int'?'Interne':'Externe'}</span></td>
+        <td>${toCHF(t.br)}</td><td>${toCHF(t.at)}</td><td>${toCHF(t.reel)}</td>
+        <td class="${eBR>=0?'negative':'positive'}">${(eBR>=0?'+':'')+toCHF(eBR)}</td>
+        <td class="${eAT>=0?'negative':'positive'}">${(eAT>=0?'+':'')+toCHF(eAT)}</td>
+      </tr>`;
+    });
+    const sE = sReel-sAT;
+    rows += `<tr class="${clsSub}">
+      <td colspan="2">Sous-total ${type==='int'?'Interne':'Externe'}</td>
+      <td>${toCHF(sBR)}</td><td>${toCHF(sAT)}</td><td>${toCHF(sReel)}</td>
+      <td class="${(sReel-sBR)>=0?'negative':'positive'}">${((sReel-sBR)>=0?'+':'')+toCHF(sReel-sBR)}</td>
+      <td class="${sE>=0?'negative':'positive'}">${(sE>=0?'+':'')+toCHF(sE)}</td>
+    </tr>`;
+    return rows;
+  };
+
+  html += renderSection(intItems, 'int', 'section-header-int', 'subtotal-int');
+  html += renderSection(extItems, 'ext', 'section-header-ext', 'subtotal-ext');
+  const totalEcatAT = totReel - totAT;
+  html += `</tbody><tfoot><tr>
+    <td colspan="2">TOTAL HONORAIRES</td>
+    <td>${toCHF(totBR)}</td><td>${toCHF(totAT)}</td><td>${toCHF(totReel)}</td>
+    <td class="${(totReel-totBR)>=0?'negative':'positive'}">${((totReel-totBR)>=0?'+':'')+toCHF(totReel-totBR)}</td>
+    <td class="${totalEcatAT>=0?'negative':'positive'}">${(totalEcatAT>=0?'+':'')+toCHF(totalEcatAT)}</td>
+  </tr></tfoot>`;
+  tbl.innerHTML = html;
+}
+
+// ============================================================
+// PLANNING PHASES SIA 2/3/4
+// ============================================================
+function processPlanningPhase(phaseName, phaseCode, pRows, rRows) {
+  const ganttId = `gantt${phaseName}`;
+  destroyChart(ganttId);
+  const ctx = document.getElementById(ganttId);
+  if (!ctx) return;
+
+  const MODELS = ['Budget_Rev','AT'];
+  const taskNames = [...new Set(pRows.map(r => getTaskName(r)))];
+  if (!taskNames.length) return;
+
+  // Pour chaque tâche × modèle : dates min/max
+  const ganttData = taskNames.map(task => {
+    const taskPrev = pRows.filter(r => getTaskName(r) === task);
+    const getBR = taskPrev.filter(r => r['Modèle de prévision']==='Budget_Rev');
+    const getAT = taskPrev.filter(r => r['Modèle de prévision']==='AT');
+    const realT = rRows.filter(r => getTaskName(r) === task);
+
+    const getDates = rows => {
+      const dates = rows.flatMap(r => [toDate(r['Date de début']), toDate(r['Date de fin']), getDateReal(r)]).filter(Boolean);
+      return dates.length ? { start: new Date(Math.min(...dates)), end: new Date(Math.max(...dates)) } : null;
+    };
+
+    return {
+      task,
+      br:   getDates(getBR),
+      at:   getDates(getAT),
+      reel: getDates(realT)
+    };
+  }).filter(t => t.br || t.at || t.reel);
+
+  if (!ganttData.length) return;
+
+  // Axe global
+  const allDates = ganttData.flatMap(t => [t.br?.start, t.br?.end, t.at?.start, t.at?.end, t.reel?.start, t.reel?.end]).filter(Boolean);
+  const axisStart = new Date(Math.min(...allDates));
+  const axisEnd   = new Date(Math.max(...allDates));
+  const axis = buildAxis(axisStart, axisEnd);
+
+  const dateToIdx = d => {
+    if (!d) return -1;
+    const mm = yyyymm(firstOfMonth(d));
+    const i = axis.indexOf(mm);
+    return i >= 0 ? i : 0;
+  };
+
+  const buildBar = dateObj => {
+    if (!dateObj) return [null, null];
+    const si = dateToIdx(dateObj.start), ei = dateToIdx(dateObj.end);
+    return [si, ei - si + 1];
+  };
+
+  const labels    = ganttData.map(t => t.task.length>22 ? t.task.substring(0,22)+'…' : t.task);
+  const brBase    = ganttData.map(t => buildBar(t.br)[0]);
+  const brLen     = ganttData.map(t => buildBar(t.br)[1]);
+  const atBase    = ganttData.map(t => buildBar(t.at)[0]);
+  const atLen     = ganttData.map(t => buildBar(t.at)[1]);
+  const reelBase  = ganttData.map(t => buildBar(t.reel)[0]);
+  const reelLen   = ganttData.map(t => buildBar(t.reel)[1]);
+
+  charts[ganttId] = new Chart(ctx, {
+    type: 'bar',
+    data: {
+      labels,
+      datasets: [
+        { label:'BR offset',   data:brBase,   backgroundColor:'transparent', borderWidth:0, stack:'br'   },
+        { label:'Budget Révisé', data:brLen,  backgroundColor:GE_ORANGE+'cc', borderRadius:3, barThickness:12, stack:'br' },
+        { label:'AT offset',   data:atBase,   backgroundColor:'transparent', borderWidth:0, stack:'at'   },
+        { label:'AT',          data:atLen,    backgroundColor:GE_BLUE2+'cc',  borderRadius:3, barThickness:12, stack:'at' },
+        { label:'Réel offset', data:reelBase, backgroundColor:'transparent', borderWidth:0, stack:'reel' },
+        { label:'Réel',        data:reelLen,  backgroundColor:GE_RED+'cc',   borderRadius:3, barThickness:12, stack:'reel' }
+      ]
+    },
+    options: {
+      indexAxis:'y', responsive:true, maintainAspectRatio:false,
+      plugins: {
+        legend: {
+          labels: {
+            filter: item => !item.text.includes('offset'),
+            usePointStyle:true, font:{size:11}
+          }
+        },
+        todayLine: { label: yyyymm(new Date()) }
+      },
+      scales: {
+        x: { stacked:true, ticks: { callback: v => axis[v] ? fmtMonth(axis[v]) : '' }, font:{size:10} },
+        y: { stacked:true }
+      }
+    }
+  });
+  ctx.parentElement.style.height = `${Math.max(250, ganttData.length * 55 + 80)}px`;
+}
+
+// ============================================================
+// SIA 5 — BUDGET
+// ============================================================
+function processSIA5Budget() {
+  const pRows = filterPrevByPhase('05');
+  const rRows = filterRealByPhase('05');
   const k = parseFloat(document.getElementById('coefK_num').value) || 12;
   const isSOnly = document.getElementById('viewSOnly').checked;
-  const today = new Date();
-  const mmToday = yyyymm(today);
 
-  // Filtrage SIA5 (code "05")
-  const p5 = prevRows.filter(r => {
-    const id = String(r['ID projet'] || '');
-    const parts = id.split('_');
-    return parts.length >= 3 && parts[2] === '05';
-  });
-  const r5 = realRows.filter(r => {
-    const id = String(r['ID projet'] || '');
-    const parts = id.split('_');
-    return parts.length >= 3 && parts[2] === '05';
-  });
+  if (!pRows.length && !rRows.length) return;
 
-  // ── Calcul modèles ──
-  const MODELS = ['Budget', 'Budget_Rev', 'AT'];
-  const model = {};
-  MODELS.forEach(mn => {
-    const rows = p5.filter(r => r['Modèle de prévision'] === mn);
-    const total = rows.reduce((a, r) => a + toNum(r['Montant total du coût']), 0);
-    const dates = rows.flatMap(r => [toDate(r['Date de début']), toDate(r['Date de fin'])]).filter(Boolean);
-    model[mn] = {
-      total,
-      start: dates.length ? new Date(Math.min(...dates.map(d=>d.getTime()))) : null,
-      end:   dates.length ? new Date(Math.max(...dates.map(d=>d.getTime()))) : null
-    };
-  });
+  // === COURBES S GLOBALES SIA 5 ===
+  const sData = buildSCurves(pRows, rRows);
+  drawSCurveChart('chartSIA5', sData, 'SIA5');
 
-  // ── Axe temporel ──
-  const allDates = [];
-  MODELS.forEach(mn => { if (model[mn].start) allDates.push(model[mn].start); if (model[mn].end) allDates.push(model[mn].end); });
-  r5.forEach(r => { const d = getRealDate(r); if(d) allDates.push(d); });
-  if (!allDates.length) return;
-
-  const globalMin = new Date(Math.min(...allDates.map(d=>d.getTime())));
-  const globalMax = new Date(Math.max(...allDates.map(d=>d.getTime())));
-  const modelDates = MODELS.filter(m=>model[m].start).flatMap(m=>[model[m].start,model[m].end]).filter(Boolean);
-  const modelMin = modelDates.length ? new Date(Math.min(...modelDates.map(d=>d.getTime()))) : globalMin;
-  const modelMax = modelDates.length ? new Date(Math.max(...modelDates.map(d=>d.getTime()))) : globalMax;
-
-  const axisMin = isSOnly ? modelMin : globalMin;
-  const axisMax = isSOnly ? modelMax : globalMax;
-  const axis = buildAxis(axisMin, axisMax);
-
-  const series = {};
-  MODELS.forEach(mn => {
-    const [si, ei] = modelRange(p5, mn, axis);
-    series[mn] = sCurve(model[mn].total, axis, k, si, ei);
-  });
-
-  // ── Réel cumulé ──
-  const realMap = new Map(axis.map(m => [m, 0]));
-  let initCum = 0;
-  r5.forEach(r => {
-    const d = getRealDate(r);
-    if (!d) return;
-    const mm = yyyymm(firstOfMonth(d));
-    if (mm > mmToday) return;
-    if (realMap.has(mm)) realMap.set(mm, realMap.get(mm) + toNum(r['Montant total du coût']));
-    else if (isSOnly && mm < axis[0]) initCum += toNum(r['Montant total du coût']);
-  });
-  const realMonth = axis.map(m => realMap.get(m) || 0);
-  let acc = initCum;
-  const realCum = realMonth.map(v => { acc += v; return acc; });
-  const realCut = realCum.map((v, i) => axis[i] > mmToday ? null : v);
-
-  // ── KPIs SIA 5 ──
-  const totalBR   = model['Budget_Rev'].total;
-  const totalAT   = model['AT'].total;
-  const totalReal = realCum[realCum.length - 1] || 0;
-  const ecartAT   = totalReal - totalAT;
-  const pctAT     = totalAT > 0 ? ((totalReal / totalAT) * 100).toFixed(1) : 0;
-
-  const kpiEl = document.getElementById('kpiSection');
-  if (kpiEl) {
-    kpiEl.style.display = 'grid';
-    kpiEl.innerHTML =
-      kpiCard('Budget Révisé SIA 5', totalBR, '6 sous-projets', 'kpi-orange') +
-      kpiCard('AT SIA 5', totalAT, 'Adjudication', 'kpi-blue2') +
-      kpiCard('Réel SIA 5', totalReal, 'Imputations cumulées', '') +
-      kpiCard('Écart vs AT', ecartAT, `${pctAT}% avancement`, ecartAT <= 0 ? 'kpi-green' : 'kpi-red');
+  // === TABLEAU MENSUEL (NOUVEAU) ===
+  if (sData) {
+    renderMonthlySIA5Table(sData);
   }
 
-  // ── Courbe S SIA 5 ──
-  destroyChart('chart');
-  const ctx = document.getElementById('chart');
-  if (ctx) {
-    charts.chart = new Chart(ctx, {
-      type: 'line',
-      data: {
-        labels: axis,
-        datasets: [
-          {
-            label: 'Budget (S)',
-            data: series['Budget'],
-            borderColor: GE_BLUE4, borderDash: [4,4], borderWidth: 1.5,
-            pointRadius: 0, fill: false, spanGaps: true, tension: 0.4
-          },
-          {
-            label: 'Budget Révisé (S)',
-            data: series['Budget_Rev'],
-            borderColor: GE_ORANGE, backgroundColor: GE_ORANGE + '15',
-            tension: 0.4, pointRadius: 0, borderWidth: 2.5, fill: false, spanGaps: true
-          },
-          {
-            label: 'AT (S)',
-            data: series['AT'],
-            borderColor: GE_BLUE, backgroundColor: GE_BLUE + '15',
-            tension: 0.4, pointRadius: 0, borderWidth: 2.5, fill: false, spanGaps: true
-          },
-          {
-            label: 'Réel cumulé',
-            data: realCut,
-            borderColor: GE_RED, backgroundColor: GE_RED + '15',
-            tension: 0.2, pointRadius: 2, borderWidth: 2.5, fill: false, spanGaps: false
-          }
-        ]
-      },
-      options: {
-        responsive: true, maintainAspectRatio: false,
-        interaction: { mode: 'index', intersect: false },
-        plugins: {
-          legend: { position: 'top' },
-          todayLine: { label: mmToday },
-          tooltip: { callbacks: { label: c => ` ${c.dataset.label}: ${toCHF(c.parsed.y)} CHF` } }
-        },
-        scales: {
-          y: { ticks: { callback: v => toCHF(v) + ' CHF' }, grid: { color: '#e2e8f0' } },
-          x: { grid: { color: '#f0f4f8' } }
-        }
-      }
+  // === KPIs ===
+  const budgetRev = pRows.filter(r => r['Modèle de prévision']==='Budget_Rev').reduce((a,r) => a+toNum(r['Montant total du coût']),0);
+  const at        = pRows.filter(r => r['Modèle de prévision']==='AT').reduce((a,r) => a+toNum(r['Montant total du coût']),0);
+  const reel      = rRows.reduce((a,r) => a+toNum(r['Montant total du coût']),0);
+  const ecart     = reel - at;
+  const pct       = at > 0 ? (reel/at*100).toFixed(1) : 0;
+
+  const kpiEl = document.getElementById('kpiSectionSIA5');
+  if (kpiEl) kpiEl.innerHTML =
+    kpiCard('Budget Révisé', toCHF(budgetRev)) +
+    kpiCard('AT', toCHF(at)) +
+    kpiCard('Réel', toCHF(reel)) +
+    kpiCard('Écart vs AT', (ecart>=0?'+':'')+toCHF(ecart), 'CHF', ecart>=0?'negative':'positive') +
+    kpiCard('Avancement', `${pct}%`, '% AT', '');
+
+  // === TABLEAU BUDGETS PAR SOUS-PROJET ===
+  const tblBudget = document.getElementById('tableSIA5Budget');
+  if (tblBudget) {
+    const taskMap = {};
+    PROJECT_ORDER.forEach(id => { taskMap[id] = { budget:0, budgetRev:0, at:0, reel:0 }; });
+    pRows.forEach(r => {
+      const id = String(r['ID projet']||r['ID Projet']||'');
+      if (!taskMap[id]) taskMap[id] = { budget:0, budgetRev:0, at:0, reel:0 };
+      const model = r['Modèle de prévision'], amt = toNum(r['Montant total du coût']);
+      if (model==='Budget')     taskMap[id].budget += amt;
+      if (model==='Budget_Rev') taskMap[id].budgetRev += amt;
+      if (model==='AT')         taskMap[id].at += amt;
     });
-  }
+    rRows.forEach(r => {
+      const id = String(r['ID projet']||r['ID Projet']||'');
+      if (!taskMap[id]) taskMap[id] = { budget:0, budgetRev:0, at:0, reel:0 };
+      taskMap[id].reel += toNum(r['Montant total du coût']);
+    });
 
-  // ── Tableau récapitulatif par sous-projet ──
-  const tablePrev = document.getElementById('tablePreview');
-  if (tablePrev) {
-    tablePrev.innerHTML = `<thead><tr>
-      <th>Sous-projet</th>
-      <th class="num">Budget</th>
-      <th class="num">Budget Révisé</th>
-      <th class="num">AT</th>
-    </tr></thead><tbody>` +
-    PROJECT_ORDER.map(id => {
-      const rows = p5.filter(r => r['ID projet'] === id);
-      const bgt = rows.filter(r=>r['Modèle de prévision']==='Budget').reduce((a,r)=>a+toNum(r['Montant total du coût']),0);
-      const br  = rows.filter(r=>r['Modèle de prévision']==='Budget_Rev').reduce((a,r)=>a+toNum(r['Montant total du coût']),0);
-      const at  = rows.filter(r=>r['Modèle de prévision']==='AT').reduce((a,r)=>a+toNum(r['Montant total du coût']),0);
-      return `<tr>
-        <td class="bold">${getPN(id)}</td>
-        <td class="num">${toCHF(bgt)}</td>
-        <td class="num">${toCHF(br)}</td>
-        <td class="num">${toCHF(at)}</td>
+    let html = `<thead><tr>
+      <th>Sous-Projet</th><th>Budget</th><th>Budget Révisé</th><th>AT</th>
+      <th>Réel</th><th>Écart BR</th><th>Écart AT</th><th>% AT</th>
+    </tr></thead><tbody>`;
+
+    Object.entries(taskMap).forEach(([id, t]) => {
+      if (t.budget===0 && t.budgetRev===0 && t.at===0 && t.reel===0) return;
+      const eBR=t.reel-t.budgetRev, eAT=t.reel-t.at;
+      const pAT=t.at>0?(t.reel/t.at*100).toFixed(1):'—';
+      html += `<tr>
+        <td><strong>${getPN(id)}</strong></td>
+        <td>${toCHF(t.budget)}</td><td>${toCHF(t.budgetRev)}</td><td>${toCHF(t.at)}</td><td>${toCHF(t.reel)}</td>
+        <td class="${eBR>=0?'negative':'positive'}">${(eBR>=0?'+':'')+toCHF(eBR)}</td>
+        <td class="${eAT>=0?'negative':'positive'}">${(eAT>=0?'+':'')+toCHF(eAT)}</td>
+        <td>${pAT}%</td>
       </tr>`;
-    }).join('') +
-    `<tr class="bold" style="background:#edf2f7;border-top:2px solid #163a5f">
-      <td>TOTAL SIA 5</td>
-      <td class="num">${toCHF(model['Budget'].total)}</td>
-      <td class="num">${toCHF(totalBR)}</td>
-      <td class="num">${toCHF(totalAT)}</td>
-    </tr></tbody>`;
-  }
-
-  // ── Camembert BR et AT ──
-  const brData = PROJECT_ORDER.map(id =>
-    p5.filter(r=>r['ID projet']===id&&r['Modèle de prévision']==='Budget_Rev').reduce((a,r)=>a+toNum(r['Montant total du coût']),0)
-  );
-  const atData = PROJECT_ORDER.map(id =>
-    p5.filter(r=>r['ID projet']===id&&r['Modèle de prévision']==='AT').reduce((a,r)=>a+toNum(r['Montant total du coût']),0)
-  );
-  const pieLabels5 = PROJECT_ORDER.map(getPN);
-
-  destroyChart('chartPieBudgetRev');
-  const ctxPieBR = document.getElementById('chartPieBudgetRev');
-  if (ctxPieBR && brData.some(v=>v!==0)) {
-    charts.chartPieBudgetRev = new Chart(ctxPieBR, {
-      type: 'doughnut',
-      data: { labels: pieLabels5, datasets: [{ data: brData, backgroundColor: PIE_COLORS, borderWidth: 2, borderColor: '#fff' }] },
-      options: {
-        responsive: true, maintainAspectRatio: false,
-        plugins: { legend: { position: 'right' }, tooltip: { callbacks: { label: c => ` ${toCHF(c.parsed)} CHF` } } }
-      }
     });
-  }
-
-  destroyChart('chartPieAT');
-  const ctxPieAT = document.getElementById('chartPieAT');
-  if (ctxPieAT && atData.some(v=>v!==0)) {
-    charts.chartPieAT = new Chart(ctxPieAT, {
-      type: 'doughnut',
-      data: { labels: pieLabels5, datasets: [{ data: atData, backgroundColor: PIE_COLORS, borderWidth: 2, borderColor: '#fff' }] },
-      options: {
-        responsive: true, maintainAspectRatio: false,
-        plugins: { legend: { position: 'right' }, tooltip: { callbacks: { label: c => ` ${toCHF(c.parsed)} CHF` } } }
-      }
-    });
-  }
-
-  // ── Graphique barres avancement SIA 5 ──
-  const realBySub = PROJECT_ORDER.map(id =>
-    r5.filter(r => String(r['ID projet'])===id).reduce((a,r)=>a+toNum(r['Montant total du coût']),0)
-  );
-
-  destroyChart('chartBar');
-  const ctxBar = document.getElementById('chartBar');
-  if (ctxBar) {
-    charts.chartBar = new Chart(ctxBar, {
-      type: 'bar',
-      data: {
-        labels: PROJECT_ORDER.map(getPN),
-        datasets: [
-          { label: 'Budget Révisé', data: brData,    backgroundColor: GE_ORANGE, borderRadius: 5 },
-          { label: 'AT',            data: atData,    backgroundColor: GE_BLUE2,  borderRadius: 5 },
-          { label: 'Réel',          data: realBySub, backgroundColor: GE_RED,    borderRadius: 5 }
-        ]
-      },
-      options: {
-        responsive: true, maintainAspectRatio: false,
-        plugins: { legend: { position: 'top' } },
-        scales: {
-          y: { ticks: { callback: v => toCHF(v) + ' CHF' }, grid: { color: '#e2e8f0' } },
-          x: { grid: { display: false } }
-        }
-      }
-    });
-  }
-
-  // ── Tableau comparatif détaillé ──
-  const tableCmp = document.getElementById('tableCompare');
-  if (tableCmp) {
-    tableCmp.innerHTML = `<thead><tr>
-      <th>Sous-projet</th>
-      <th class="num">Budget</th>
-      <th class="num">Budget Révisé</th>
-      <th class="num">AT</th>
-      <th class="num">Réel</th>
-      <th class="num">Écart BR</th>
-      <th class="num">Écart AT</th>
-      <th class="num">% BR</th>
-    </tr></thead><tbody>` +
-    PROJECT_ORDER.map((id, i) => {
-      const rows = p5.filter(r => r['ID projet'] === id);
-      const bgt  = rows.filter(r=>r['Modèle de prévision']==='Budget').reduce((a,r)=>a+toNum(r['Montant total du coût']),0);
-      const br   = rows.filter(r=>r['Modèle de prévision']==='Budget_Rev').reduce((a,r)=>a+toNum(r['Montant total du coût']),0);
-      const at   = rows.filter(r=>r['Modèle de prévision']==='AT').reduce((a,r)=>a+toNum(r['Montant total du coût']),0);
-      const reel = realBySub[i];
-      const eBR  = reel - br, eAT = reel - at;
-      const pct  = br > 0 ? ((reel/br)*100).toFixed(1) : 0;
-      return `<tr>
-        <td class="bold">${getPN(id)}</td>
-        <td class="num">${toCHF(bgt)}</td>
-        <td class="num">${toCHF(br)}</td>
-        <td class="num">${toCHF(at)}</td>
-        <td class="num">${toCHF(reel)}</td>
-        <td class="num ${eBR<=0?'green':'red'}">${eBR>=0?'+':''}${toCHF(eBR)}</td>
-        <td class="num ${eAT<=0?'green':'red'}">${eAT>=0?'+':''}${toCHF(eAT)}</td>
-        <td class="num">${pct}%</td>
-      </tr>`;
-    }).join('') +
-    `<tr class="bold" style="background:#edf2f7;border-top:2px solid #163a5f">
+    html += `</tbody><tfoot><tr>
       <td>TOTAL</td>
-      <td class="num">${toCHF(model['Budget'].total)}</td>
-      <td class="num">${toCHF(totalBR)}</td>
-      <td class="num">${toCHF(totalAT)}</td>
-      <td class="num">${toCHF(totalReal)}</td>
-      <td class="num ${totalReal-totalBR<=0?'green':'red'}">${totalReal-totalBR>=0?'+':''}${toCHF(totalReal-totalBR)}</td>
-      <td class="num ${ecartAT<=0?'green':'red'}">${ecartAT>=0?'+':''}${toCHF(ecartAT)}</td>
-      <td class="num">${totalBR>0?((totalReal/totalBR)*100).toFixed(1):0}%</td>
-    </tr></tbody>`;
-  }
-}
-
-// ═══════════════════════════════════════════════════════════
-// SIA 5 — IMPUTATIONS (Honoraires + Ressources)
-// ═══════════════════════════════════════════════════════════
-function processImputations() {
-  const r5 = realRows.filter(r => {
-    const id = String(r['ID projet'] || '');
-    const parts = id.split('_');
-    return parts.length >= 3 && parts[2] === '05';
-  });
-
-  // ── Filtrage lignes honoraires ──
-  const honoRows = r5.filter(r => {
-    const nom = String(r['Nom de la tâche'] || '').toLowerCase();
-    return nom.includes('honoraire');
-  });
-
-  // ── Catégorisation par métier ──
-  const METIERS = [
-    { key: 'Réseau CAD',        pattern: /réseau\s*cad/i },
-    { key: 'Sous-stations',     pattern: /sous.station/i },
-    { key: 'Centrale',          pattern: /centrale/i },
-    { key: 'Bâtiment',          pattern: /bâtiment|batiment/i },
-    { key: 'Général - Direction', pattern: /général|general|direction/i },
-    { key: 'Participations',    pattern: /participation/i }
-  ];
-
-  const metiersData = {};
-  METIERS.forEach(m => { metiersData[m.key] = { int: 0, ext: 0 }; });
-  metiersData['Autres'] = { int: 0, ext: 0 };
-
-  honoRows.forEach(r => {
-    const nom = String(r['Nom de la tâche'] || '');
-    const montant = toNum(r['Montant total du coût']);
-    const isExt = Boolean(r['Nom du fournisseur'] && String(r['Nom du fournisseur']).trim()) ||
-                  nom.toLowerCase().includes('externe');
-
-    let matched = false;
-    for (const m of METIERS) {
-      if (m.pattern.test(nom)) {
-        metiersData[m.key][isExt ? 'ext' : 'int'] += montant;
-        matched = true; break;
-      }
-    }
-    if (!matched) metiersData['Autres'][isExt ? 'ext' : 'int'] += montant;
-  });
-
-  // KPIs honoraires
-  const totalInt = Object.values(metiersData).reduce((a, v) => a + v.int, 0);
-  const totalExt = Object.values(metiersData).reduce((a, v) => a + v.ext, 0);
-
-  const kpiHono = document.getElementById('kpiSectionHonoraires');
-  if (kpiHono) {
-    kpiHono.style.display = 'grid';
-    kpiHono.innerHTML =
-      kpiCard('Honoraires Internes', totalInt, 'Ressources Groupe E', '') +
-      kpiCard('Honoraires Externes', totalExt, 'Fournisseurs tiers', 'kpi-orange') +
-      kpiCard('Total Honoraires', totalInt + totalExt, 'SIA 5 toutes ressources', 'kpi-blue2') +
-      kpiCard('Ratio Ext/Total', totalInt + totalExt > 0 ? (totalExt/(totalInt+totalExt)*100).toFixed(1) + '%' : '0%', 'Part externe', '');
-  }
-  // Correction : la 4e carte est un pourcentage, pas un CHF
-  if (kpiHono) {
-    const cards = kpiHono.querySelectorAll('.kpi-card');
-    if (cards[3]) {
-      cards[3].querySelector('.kpi-value').textContent =
-        totalInt + totalExt > 0 ? ((totalExt/(totalInt+totalExt))*100).toFixed(1) + '%' : '0%';
-    }
+      <td>${toCHF(pRows.filter(r=>r['Modèle de prévision']==='Budget').reduce((a,r)=>a+toNum(r['Montant total du coût']),0))}</td>
+      <td>${toCHF(budgetRev)}</td><td>${toCHF(at)}</td><td>${toCHF(reel)}</td>
+      <td class="${(reel-budgetRev)>=0?'negative':'positive'}">${((reel-budgetRev)>=0?'+':'')+toCHF(reel-budgetRev)}</td>
+      <td class="${ecart>=0?'negative':'positive'}">${(ecart>=0?'+':'')+toCHF(ecart)}</td>
+      <td>${pct}%</td>
+    </tr></tfoot>`;
+    tblBudget.innerHTML = html;
   }
 
-  // ── Graphique barres honoraires par métier ──
-  const allMetiers = Object.keys(metiersData).filter(k => metiersData[k].int + metiersData[k].ext > 0);
-  destroyChart('chartHonoMetier');
-  const ctxHono = document.getElementById('chartHonoMetier');
-  if (ctxHono && allMetiers.length) {
-    charts.chartHonoMetier = new Chart(ctxHono, {
-      type: 'bar',
-      data: {
-        labels: allMetiers,
-        datasets: [
-          { label: 'Internes', data: allMetiers.map(k=>metiersData[k].int), backgroundColor: GE_BLUE3, borderRadius: 5 },
-          { label: 'Externes', data: allMetiers.map(k=>metiersData[k].ext), backgroundColor: GE_ORANGE, borderRadius: 5 }
-        ]
-      },
-      options: {
-        responsive: true, maintainAspectRatio: false,
-        plugins: { legend: { position: 'top' } },
-        scales: {
-          y: { ticks: { callback: v => toCHF(v) + ' CHF' }, grid: { color: '#e2e8f0' } },
-          x: { grid: { display: false } }
-        }
-      }
-    });
-  }
+  // === CAMEMBERT SIA 5 ===
+  destroyChart('pieSIA5BR');
+  const pieSIA5Ctx = document.getElementById('pieSIA5BR');
+  if (pieSIA5Ctx) {
+    const pieData = PROJECT_ORDER.map(id => ({
+      label: getPN(id),
+      value: pRows.filter(r => (r['ID projet']||r['ID Projet'])===id && r['Modèle de prévision']==='Budget_Rev')
+                  .reduce((a,r)=>a+toNum(r['Montant total du coût']),0)
+    })).filter(d => d.value > 0);
 
-  // ── Tableau ressources internes / externes ──
-  // Agrégation par nom de ressource
-  const resMap = new Map();
-  r5.forEach(r => {
-    const nom = String(r['Nom de la tâche'] || '');
-    const ressource = String(r['Nom de la ressource'] || r['Ressource'] || '');
-    const fournisseur = String(r['Nom du fournisseur'] || '');
-    const isExt = Boolean(fournisseur.trim()) || nom.toLowerCase().includes('externe');
-    const key = ressource || fournisseur || 'Inconnu';
-    const montant = toNum(r['Montant total du coût']);
-    if (!resMap.has(key)) resMap.set(key, { ressource: key, fournisseur, isExt, total: 0, tache: nom });
-    resMap.get(key).total += montant;
-  });
-
-  const ressources = [...resMap.values()].sort((a,b) => b.total - a.total);
-
-  const tableRess = document.getElementById('tableRessources');
-  if (tableRess && ressources.length) {
-    tableRess.innerHTML = `<thead><tr>
-      <th>Type</th>
-      <th>Ressource / Fournisseur</th>
-      <th>Tâche principale</th>
-      <th class="num">Total CHF</th>
-    </tr></thead><tbody>` +
-    ressources.map(r => `<tr class="${r.isExt ? 'tr-external' : 'tr-internal'}">
-      <td><span class="${r.isExt ? 'badge-ext' : 'badge-int'}">${r.isExt ? 'EXT' : 'INT'}</span></td>
-      <td>${r.ressource}</td>
-      <td style="max-width:200px;overflow:hidden;text-overflow:ellipsis">${r.tache}</td>
-      <td class="num">${toCHF(r.total)}</td>
-    </tr>`).join('') +
-    '</tbody>';
-  }
-}
-
-// ═══════════════════════════════════════════════════════════
-// SIA 5 — PLANNING & GANTT
-// ═══════════════════════════════════════════════════════════
-function processPlanning() {
-  const p5 = prevRows.filter(r => {
-    const id = String(r['ID projet'] || '');
-    const parts = id.split('_');
-    return parts.length >= 3 && parts[2] === '05';
-  });
-  const r5 = realRows.filter(r => {
-    const id = String(r['ID projet'] || '');
-    const parts = id.split('_');
-    return parts.length >= 3 && parts[2] === '05';
-  });
-
-  // Calcul plages par sous-projet
-  const planning = {};
-  PROJECT_ORDER.forEach(id => {
-    const pRows = p5.filter(r => r['ID projet'] === id);
-    const rRows = r5.filter(r => String(r['ID projet']) === id);
-
-    const getBudgetDates = mn => {
-      const rows = pRows.filter(r => r['Modèle de prévision'] === mn);
-      const dates = rows.flatMap(r => [toDate(r['Date de début']), toDate(r['Date de fin'])]).filter(Boolean);
-      return dates.length ? {
-        start: new Date(Math.min(...dates.map(d=>d.getTime()))),
-        end:   new Date(Math.max(...dates.map(d=>d.getTime())))
-      } : null;
-    };
-
-    const realDates = rRows.map(r => getRealDate(r)).filter(Boolean);
-
-    // Dates manuelles si définies
-    const manual = manualPlanningDates[id];
-    const realStart = manual?.start || (realDates.length ? new Date(Math.min(...realDates.map(d=>d.getTime()))) : null);
-    const realEnd   = manual?.end   || (realDates.length ? new Date(Math.max(...realDates.map(d=>d.getTime()))) : null);
-
-    planning[id] = {
-      name:      getPN(id),
-      budget:    getBudgetDates('Budget'),
-      budgetRev: getBudgetDates('Budget_Rev'),
-      at:        getBudgetDates('AT'),
-      reel:      realStart && realEnd ? { start: realStart, end: realEnd } : null
-    };
-  });
-
-  // ── Formulaire inputs planning ──
-  const planInputsEl = document.getElementById('planningInputs');
-  if (planInputsEl) {
-    planInputsEl.innerHTML = PROJECT_ORDER.map(id => {
-      const p = planning[id];
-      const rs = p.reel?.start ? p.reel.start.toISOString().split('T')[0] : '';
-      const re = p.reel?.end   ? p.reel.end.toISOString().split('T')[0]   : '';
-      return `<div class="planning-row">
-        <label>${p.name}</label>
-        <span style="font-size:.75rem;color:#718096">Réel Début</span>
-        <input type="date" id="rs_${id}" value="${rs}">
-        <span style="font-size:.75rem;color:#718096">Fin</span>
-        <input type="date" id="re_${id}" value="${re}">
-      </div>`;
-    }).join('');
-  }
-
-  // ── Gantt ──
-  // On construit les données pour un chart de type 'bar' horizontal flottant
-  const today = new Date();
-  const allGanttDates = [];
-  PROJECT_ORDER.forEach(id => {
-    const p = planning[id];
-    ['budget','budgetRev','at','reel'].forEach(k => {
-      if (p[k]) { allGanttDates.push(p[k].start); allGanttDates.push(p[k].end); }
-    });
-  });
-  if (!allGanttDates.length) return;
-  allGanttDates.push(today);
-
-  const ganttMin = new Date(Math.min(...allGanttDates.map(d=>d.getTime())));
-  const ganttMax = new Date(Math.max(...allGanttDates.map(d=>d.getTime())));
-  const toMs = d => d ? d.getTime() : null;
-  const names = PROJECT_ORDER.map(id => planning[id].name);
-
-  // Convertir en jours depuis ganttMin pour l'axe
-  const toDays = d => d ? Math.round((d.getTime() - ganttMin.getTime()) / 86400000) : null;
-  const totalDays = Math.round((ganttMax.getTime() - ganttMin.getTime()) / 86400000) + 10;
-
-  // Génère dataset flottant [start, end] en jours
-  const makeDataset = (colorFill, colorBorder, label, key) => ({
-    label,
-    data: PROJECT_ORDER.map(id => {
-      const p = planning[id][key];
-      if (!p) return null;
-      return [toDays(p.start), toDays(p.end)];
-    }),
-    backgroundColor: colorFill,
-    borderColor: colorBorder,
-    borderWidth: 1.5,
-    borderRadius: 4,
-    barThickness: 14
-  });
-
-  destroyChart('chartGantt');
-  const ctxGantt = document.getElementById('chartGantt');
-  if (ctxGantt) {
-    charts.chartGantt = new Chart(ctxGantt, {
-      type: 'bar',
-      data: {
-        labels: names,
-        datasets: [
-          makeDataset(GE_BLUE4 + '88', GE_BLUE4, 'Budget', 'budget'),
-          makeDataset(GE_ORANGE + '88', GE_ORANGE, 'Budget Révisé', 'budgetRev'),
-          makeDataset(GE_BLUE2 + '88', GE_BLUE2, 'AT', 'at'),
-          makeDataset(GE_RED + '88', GE_RED, 'Réel', 'reel')
-        ]
-      },
-      options: {
-        indexAxis: 'y',
-        responsive: true, maintainAspectRatio: false,
-        plugins: {
-          legend: { position: 'top' },
-          tooltip: {
-            callbacks: {
-              label: c => {
-                if (!c.raw) return '';
-                const s = new Date(ganttMin.getTime() + c.raw[0] * 86400000);
-                const e = new Date(ganttMin.getTime() + c.raw[1] * 86400000);
-                return ` ${c.dataset.label}: ${s.toLocaleDateString('fr-CH')} → ${e.toLocaleDateString('fr-CH')}`;
-              }
-            }
-          }
+    if (pieData.length) {
+      charts['pieSIA5BR'] = new Chart(pieSIA5Ctx, {
+        type: 'doughnut',
+        data: {
+          labels: pieData.map(d=>d.label),
+          datasets: [{
+            data: pieData.map(d=>d.value),
+            backgroundColor: pieData.map((_,i)=>PIE_COLORS[i%PIE_COLORS.length]),
+            borderWidth:2, borderColor:'#fff'
+          }]
         },
-        scales: {
-          x: {
-            min: 0, max: totalDays,
-            ticks: {
-              callback: v => {
-                const d = new Date(ganttMin.getTime() + v * 86400000);
-                return d.toLocaleDateString('fr-CH', { month: 'short', year: '2-digit' });
-              },
-              maxTicksLimit: 12
-            },
-            grid: { color: '#e2e8f0' }
-          },
-          y: { grid: { display: false } }
+        options: {
+          responsive:true, maintainAspectRatio:false,
+          plugins: {
+            legend: { position:'right', labels:{ font:{size:11}, usePointStyle:true } },
+            tooltip: { callbacks: { label: ctx => ` ${ctx.label}: CHF ${toCHF(ctx.parsed)}` } }
+          }
         }
-      }
-    });
+      });
+    }
   }
 
-  // ── Tableau planning ──
-  const tablePlan = document.getElementById('tablePlanning');
-  if (tablePlan) {
-    const fmt = d => d ? d.toLocaleDateString('fr-CH') : '—';
-    tablePlan.innerHTML = `<thead><tr>
-      <th>Sous-projet</th>
-      <th>Budget Début</th><th>Budget Fin</th>
-      <th>Budget Rév. Début</th><th>Budget Rév. Fin</th>
+  // === BARRES SIA 5 ===
+  destroyChart('barSIA5');
+  const barSIA5Ctx = document.getElementById('barSIA5');
+  if (barSIA5Ctx) {
+    const barData = PROJECT_ORDER.map(id => {
+      const atV  = pRows.filter(r=>(r['ID projet']||r['ID Projet'])===id && r['Modèle de prévision']==='AT').reduce((a,r)=>a+toNum(r['Montant total du coût']),0);
+      const reelV = rRows.filter(r=>(r['ID projet']||r['ID Projet'])===id).reduce((a,r)=>a+toNum(r['Montant total du coût']),0);
+      return { label: getPN(id), at: atV, reel: reelV };
+    }).filter(d => d.at>0 || d.reel>0);
+
+    if (barData.length) {
+      charts['barSIA5'] = new Chart(barSIA5Ctx, {
+        type:'bar',
+        data:{
+          labels: barData.map(d=>d.label),
+          datasets:[
+            { label:'AT',   data:barData.map(d=>d.at),   backgroundColor:GE_BLUE2+'cc' },
+            { label:'Réel', data:barData.map(d=>d.reel), backgroundColor:GE_RED+'cc'   }
+          ]
+        },
+        options:{
+          indexAxis:'y', responsive:true, maintainAspectRatio:false,
+          plugins:{ legend:{position:'top'} },
+          scales:{ x:{ ticks:{ callback:v=>toCHF(v) } } }
+        }
+      });
+    }
+  }
+}
+
+// ============================================================
+// TABLEAU MENSUEL SIA 5 (NOUVEAU)
+// ============================================================
+function renderMonthlySIA5Table(sData) {
+  const { axis, series, realMonth, realCum } = sData;
+  const tbl = document.getElementById('tableSIA5Monthly');
+  if (!tbl) return;
+
+  // Dériver les valeurs mensuelles depuis cumul
+  const brCum  = series['Budget_Rev'];
+  const atCum  = series['AT'];
+
+  // Mensuel projeté (delta cumul)
+  const getMonthly = cum => cum.map((v,i) => {
+    if (v === null) return null;
+    const prev = i > 0 ? (cum[i-1] || 0) : 0;
+    return v - prev;
+  });
+  const brMonthly = getMonthly(brCum);
+  const atMonthly = getMonthly(atCum);
+
+  // Cumul réel
+  let cumReel = 0;
+  const realCumArr = realMonth.map(v => { cumReel += v; return cumReel; });
+
+  const today = new Date(), mmToday = yyyymm(today);
+
+  let html = `<thead><tr>
+    <th>Mois</th>
+    <th>BR Mensuel (S)</th><th>BR Cumulé</th>
+    <th>Réel Mensuel</th><th>Réel Cumulé</th>
+    <th>Écart Mensuel</th><th>Écart Cumulé</th>
+  </tr></thead><tbody>`;
+
+  axis.forEach((mm, i) => {
+    if (axis[i] > mmToday && realMonth[i] === 0) {
+      // Mois futur sans réel : afficher la projection uniquement si BR non null
+      if (brCum[i] === null) return;
+    }
+    const brM   = brMonthly[i] || 0;
+    const brC   = brCum[i] || 0;
+    const reelM = realMonth[i] || 0;
+    const reelC = realCumArr[i] || 0;
+    const ecM   = reelM - brM;
+    const ecC   = reelC - brC;
+    const isPast = mm <= mmToday;
+    const rowClass = isPast ? '' : 'style="color:#888;font-style:italic;"';
+
+    html += `<tr ${rowClass}>
+      <td>${fmtMonth(mm)}${mm===mmToday?' <span class="badge en-cours">Aujourd\'hui</span>':''}</td>
+      <td>${brM>0 ? toCHF(brM) : '—'}</td>
+      <td>${brC>0 ? toCHF(brC) : '—'}</td>
+      <td>${reelM>0 ? toCHF(reelM) : isPast?'<span style="color:#999">0</span>':'—'}</td>
+      <td>${reelC>0 ? toCHF(reelC) : '—'}</td>
+      <td class="${isPast && reelM>0 ? (ecM>=0?'negative':'positive') : ''}">${isPast && (reelM>0||brM>0) ? (ecM>=0?'+':'')+toCHF(ecM) : '—'}</td>
+      <td class="${isPast && reelC>0 ? (ecC>=0?'negative':'positive') : ''}">${isPast && (reelC>0||brC>0) ? (ecC>=0?'+':'')+toCHF(ecC) : '—'}</td>
+    </tr>`;
+  });
+  html += `</tbody>`;
+  tbl.innerHTML = html;
+}
+
+// ============================================================
+// SIA 5 — IMPUTATIONS
+// ============================================================
+function processSIA5Imputations() {
+  const pRows = filterPrevByPhase('05');
+  const rRows = filterRealByPhase('05');
+
+  // Honoraires uniquement
+  const honorPrev = pRows.filter(r => isHonoraires(r));
+  const honorReal = rRows.filter(r => isHonoraires(r));
+
+  // Grouper par sous-projet + int/ext
+  const taskMap = {};
+  honorPrev.forEach(r => {
+    const id    = String(r['ID projet']||r['ID Projet']||'');
+    const model = r['Modèle de prévision'];
+    const ext   = isExternal(r);
+    const key   = `${id}__${ext?'ext':'int'}`;
+    if (!taskMap[key]) taskMap[key] = { id, name: getPN(id), ext, br:0, at:0, reel:0 };
+    if (model==='Budget_Rev') taskMap[key].br   += toNum(r['Montant total du coût']);
+    if (model==='AT')         taskMap[key].at   += toNum(r['Montant total du coût']);
+  });
+  honorReal.forEach(r => {
+    const id  = String(r['ID projet']||r['ID Projet']||'');
+    const ext = isExternal(r);
+    const key = `${id}__${ext?'ext':'int'}`;
+    if (!taskMap[key]) taskMap[key] = { id, name: getPN(id), ext, br:0, at:0, reel:0 };
+    taskMap[key].reel += toNum(r['Montant total du coût']);
+  });
+
+  const items    = Object.values(taskMap).filter(t => t.br>0 || t.at>0 || t.reel>0);
+  const intItems = items.filter(t => !t.ext);
+  const extItems = items.filter(t => t.ext);
+
+  // KPI
+  const totBR   = items.reduce((a,t)=>a+t.br,  0);
+  const totAT   = items.reduce((a,t)=>a+t.at,  0);
+  const totReel = items.reduce((a,t)=>a+t.reel, 0);
+  const ecartAT = totReel - totAT;
+
+  const kpiEl = document.getElementById('kpiSectionImpSIA5');
+  if (kpiEl) kpiEl.innerHTML =
+    kpiCard('Honoraires BR',    toCHF(totBR)) +
+    kpiCard('Honoraires AT',    toCHF(totAT)) +
+    kpiCard('Réel Honoraires',  toCHF(totReel)) +
+    kpiCard('Écart vs AT', (ecartAT>=0?'+':'')+toCHF(ecartAT), 'CHF', ecartAT>=0?'negative':'positive');
+
+  // Tableau
+  const tbl = document.getElementById('tableImputSIA5');
+  if (!tbl) return;
+
+  let html = `<thead><tr>
+    <th>Sous-Projet</th><th>Type</th><th>Budget Révisé</th><th>AT</th>
+    <th>Réel</th><th>Écart BR</th><th>Écart AT</th>
+  </tr></thead><tbody>`;
+
+  const renderSection = (list, type, cls, clsSub) => {
+    if (!list.length) return '';
+    let rows = `<tr class="${cls}"><td colspan="7">${type==='int'?'🔵 INTERNES':'🟡 EXTERNES'}</td></tr>`;
+    let sBR=0, sAT=0, sReel=0;
+    list.forEach(t => {
+      const eBR=t.reel-t.br, eAT=t.reel-t.at;
+      sBR+=t.br; sAT+=t.at; sReel+=t.reel;
+      rows += `<tr class="${type==='int'?'row-int':'row-ext'}">
+        <td>${t.name}</td>
+        <td><span class="badge ${type==='int'?'prevu':'en-cours'}">${type==='int'?'Interne':'Externe'}</span></td>
+        <td>${toCHF(t.br)}</td><td>${toCHF(t.at)}</td><td>${toCHF(t.reel)}</td>
+        <td class="${eBR>=0?'negative':'positive'}">${(eBR>=0?'+':'')+toCHF(eBR)}</td>
+        <td class="${eAT>=0?'negative':'positive'}">${(eAT>=0?'+':'')+toCHF(eAT)}</td>
+      </tr>`;
+    });
+    const sE=sReel-sAT;
+    rows += `<tr class="${clsSub}">
+      <td colspan="2">Sous-total ${type==='int'?'Interne':'Externe'}</td>
+      <td>${toCHF(sBR)}</td><td>${toCHF(sAT)}</td><td>${toCHF(sReel)}</td>
+      <td class="${(sReel-sBR)>=0?'negative':'positive'}">${((sReel-sBR)>=0?'+':'')+toCHF(sReel-sBR)}</td>
+      <td class="${sE>=0?'negative':'positive'}">${(sE>=0?'+':'')+toCHF(sE)}</td>
+    </tr>`;
+    return rows;
+  };
+
+  html += renderSection(intItems, 'int', 'section-header-int', 'subtotal-int');
+  html += renderSection(extItems, 'ext', 'section-header-ext', 'subtotal-ext');
+  html += `</tbody><tfoot><tr>
+    <td colspan="2">TOTAL HONORAIRES</td>
+    <td>${toCHF(totBR)}</td><td>${toCHF(totAT)}</td><td>${toCHF(totReel)}</td>
+    <td class="${(totReel-totBR)>=0?'negative':'positive'}">${((totReel-totBR)>=0?'+':'')+toCHF(totReel-totBR)}</td>
+    <td class="${ecartAT>=0?'negative':'positive'}">${(ecartAT>=0?'+':'')+toCHF(ecartAT)}</td>
+  </tr></tfoot>`;
+  tbl.innerHTML = html;
+}
+
+// ============================================================
+// SIA 5 — PLANNING (avec édition inline dans tableau)
+// ============================================================
+function processPlanningSIA5() {
+  const pRows = filterPrevByPhase('05');
+  const rRows = filterRealByPhase('05');
+
+  // Construire les données de planning par sous-projet
+  const planData = PROJECT_ORDER.map(id => {
+    const brRows   = pRows.filter(r => (r['ID projet']||r['ID Projet'])===id && r['Modèle de prévision']==='Budget_Rev');
+    const atRows   = pRows.filter(r => (r['ID projet']||r['ID Projet'])===id && r['Modèle de prévision']==='AT');
+    const reelRows = rRows.filter(r => (r['ID projet']||r['ID Projet'])===id);
+
+    const getDates = rows => {
+      const dates = rows.flatMap(r => [toDate(r['Date de début']), toDate(r['Date de fin']), getDateReal(r)]).filter(Boolean);
+      return dates.length ? { start: new Date(Math.min(...dates)), end: new Date(Math.max(...dates)) } : null;
+    };
+
+    const manual = manualPlanningDates[id] || {};
+    const brBase  = getDates(brRows);
+    const atBase  = getDates(atRows);
+    const reelBase= getDates(reelRows);
+
+    return {
+      id, name: getPN(id),
+      br:   { start: manual.brStart || brBase?.start   || null, end: manual.brEnd || brBase?.end   || null },
+      at:   { start: manual.atStart || atBase?.start   || null, end: manual.atEnd || atBase?.end   || null },
+      reel: { start: reelBase?.start || null, end: reelBase?.end || null }
+    };
+  });
+
+  // === TABLEAU PLANNING ÉDITABLE ===
+  const tblPlan = document.getElementById('tablePlanningSIA5');
+  if (tblPlan) {
+    let html = `<thead><tr>
+      <th>Sous-Projet</th>
+      <th>BR Début</th><th>BR Fin</th>
       <th>AT Début</th><th>AT Fin</th>
       <th>Réel Début</th><th>Réel Fin</th>
-    </tr></thead><tbody>` +
-    PROJECT_ORDER.map(id => {
-      const p = planning[id];
-      return `<tr>
-        <td class="bold">${p.name}</td>
-        <td>${fmt(p.budget?.start)}</td><td>${fmt(p.budget?.end)}</td>
-        <td>${fmt(p.budgetRev?.start)}</td><td>${fmt(p.budgetRev?.end)}</td>
-        <td>${fmt(p.at?.start)}</td><td>${fmt(p.at?.end)}</td>
-        <td>${fmt(p.reel?.start)}</td><td>${fmt(p.reel?.end)}</td>
+      <th>Statut</th>
+    </tr></thead><tbody>`;
+
+    planData.forEach(p => {
+      const today = new Date();
+      let statut = '', statusClass = '';
+      if (p.reel.start && p.reel.end && p.reel.end < today) {
+        statut = 'Terminé'; statusClass = 'termine';
+      } else if (p.reel.start && p.reel.start <= today) {
+        if (p.at.end && today > p.at.end) { statut = 'Retard'; statusClass = 'retard'; }
+        else { statut = 'En cours'; statusClass = 'en-cours'; }
+      } else {
+        statut = 'Prévu'; statusClass = 'prevu';
+      }
+
+      html += `<tr>
+        <td><strong>${p.name}</strong></td>
+        <td><input type="date" class="date-input plan-input" data-id="${p.id}" data-field="brStart" value="${toDateInput(p.br.start)}"></td>
+        <td><input type="date" class="date-input plan-input" data-id="${p.id}" data-field="brEnd"   value="${toDateInput(p.br.end)}"></td>
+        <td><input type="date" class="date-input plan-input" data-id="${p.id}" data-field="atStart" value="${toDateInput(p.at.start)}"></td>
+        <td><input type="date" class="date-input plan-input" data-id="${p.id}" data-field="atEnd"   value="${toDateInput(p.at.end)}"></td>
+        <td><span style="color:#555;">${p.reel.start ? toDateInput(p.reel.start) : '—'}</span></td>
+        <td><span style="color:#555;">${p.reel.end   ? toDateInput(p.reel.end)   : '—'}</span></td>
+        <td><span class="badge ${statusClass}">${statut}</span></td>
       </tr>`;
-    }).join('') + '</tbody>';
+    });
+    html += `</tbody>`;
+    tblPlan.innerHTML = html;
+
+    // Event en temps réel : chaque changement de date déclenche le recalcul immédiat
+    tblPlan.querySelectorAll('.plan-input').forEach(input => {
+      input.addEventListener('change', () => {
+        collectManualDates();
+        renderGanttSIA5(planData.map(p => {
+          const manual = manualPlanningDates[p.id] || {};
+          return {
+            ...p,
+            br:   { start: manual.brStart || p.br.start,   end: manual.brEnd || p.br.end   },
+            at:   { start: manual.atStart || p.at.start,   end: manual.atEnd || p.at.end   }
+          };
+        }));
+      });
+    });
   }
+
+  // Gantt initial
+  renderGanttSIA5(planData);
 }
 
-// ═══════════════════════════════════════════════════════════
-// EXPORT PDF
-// ═══════════════════════════════════════════════════════════
+function collectManualDates() {
+  document.querySelectorAll('.plan-input').forEach(input => {
+    const id    = input.dataset.id;
+    const field = input.dataset.field;
+    if (!manualPlanningDates[id]) manualPlanningDates[id] = {};
+    manualPlanningDates[id][field] = input.value ? new Date(input.value) : null;
+  });
+}
+
+function renderGanttSIA5(planData) {
+  destroyChart('ganttSIA5');
+  const ctx = document.getElementById('ganttSIA5');
+  if (!ctx) return;
+
+  const valid = planData.filter(p => p.br.start || p.at.start || p.reel.start);
+  if (!valid.length) return;
+
+  const allDates = valid.flatMap(p => [p.br.start,p.br.end,p.at.start,p.at.end,p.reel.start,p.reel.end]).filter(Boolean);
+  const axisStart = new Date(Math.min(...allDates));
+  const axisEnd   = new Date(Math.max(...allDates));
+  const axis = buildAxis(axisStart, axisEnd);
+
+  const toIdx = d => {
+    if (!d) return null;
+    const mm = yyyymm(firstOfMonth(d));
+    const i = axis.indexOf(mm);
+    return i >= 0 ? i : null;
+  };
+
+  const buildBar = (startD, endD) => {
+    const si = toIdx(startD), ei = toIdx(endD);
+    if (si === null) return [null, null];
+    const len = ei !== null ? Math.max(1, ei - si + 1) : 1;
+    return [si, len];
+  };
+
+  const labels = valid.map(p => p.name);
+  const [brBaseArr, brLenArr]     = [valid.map(p=>buildBar(p.br.start,p.br.end)[0]),   valid.map(p=>buildBar(p.br.start,p.br.end)[1])];
+  const [atBaseArr, atLenArr]     = [valid.map(p=>buildBar(p.at.start,p.at.end)[0]),   valid.map(p=>buildBar(p.at.start,p.at.end)[1])];
+  const [reelBaseArr, reelLenArr] = [valid.map(p=>buildBar(p.reel.start,p.reel.end)[0]), valid.map(p=>buildBar(p.reel.start,p.reel.end)[1])];
+
+  charts['ganttSIA5'] = new Chart(ctx, {
+    type: 'bar',
+    data: {
+      labels,
+      datasets: [
+        { label:'BR off',   data:brBaseArr,   backgroundColor:'transparent', borderWidth:0, stack:'br',   barThickness:18 },
+        { label:'Budget Révisé', data:brLenArr, backgroundColor:GE_ORANGE+'cc', borderRadius:3, stack:'br',   barThickness:18 },
+        { label:'AT off',   data:atBaseArr,   backgroundColor:'transparent', borderWidth:0, stack:'at',   barThickness:18 },
+        { label:'AT',       data:atLenArr,    backgroundColor:GE_BLUE2+'cc',  borderRadius:3, stack:'at',   barThickness:18 },
+        { label:'Réel off', data:reelBaseArr, backgroundColor:'transparent', borderWidth:0, stack:'reel', barThickness:18 },
+        { label:'Réel',     data:reelLenArr,  backgroundColor:GE_RED+'cc',   borderRadius:3, stack:'reel', barThickness:18 }
+      ]
+    },
+    options: {
+      indexAxis:'y', responsive:true, maintainAspectRatio:false,
+      plugins: {
+        legend: {
+          labels: {
+            filter: item => !item.text.includes('off'),
+            usePointStyle:true, font:{size:12}
+          }
+        },
+        todayLine: { label: yyyymm(new Date()) }
+      },
+      scales: {
+        x: { stacked:true, ticks:{ callback: v => axis[v] ? fmtMonth(axis[v]) : '', font:{size:10} }, grid:{color:'#e8eef5'} },
+        y: { stacked:true, ticks:{ font:{size:11} } }
+      }
+    }
+  });
+  ctx.parentElement.style.height = `${valid.length * 70 + 80}px`;
+}
+
+// ============================================================
+// EXPORT PDF — Corrigé
+// ============================================================
 async function generatePDF() {
   const { jsPDF } = window.jspdf;
   const scope = document.getElementById('pdfScope').value;
 
-  setStatus('⏳ Génération PDF en cours...', '');
-  showLoader(true);
+  const doc = new jsPDF({ orientation:'portrait', unit:'mm', format:'a4' });
+  const pageW = 210, pageH = 297, margin = 12;
+  const contentW = pageW - 2*margin;
+  let y = margin;
+  let pageCount = 1;
 
-  const pdf = new jsPDF({ orientation: 'portrait', unit: 'mm', format: 'a4' });
-  const W = 210, H = 297, M = 12;
-  let y = M;
-
-  const addHeader = (title) => {
-    pdf.setFillColor(22, 58, 95);
-    pdf.rect(0, 0, W, 22, 'F');
-    pdf.setTextColor(255, 255, 255);
-    pdf.setFontSize(13);
-    pdf.setFont('helvetica', 'bold');
-    pdf.text('📊 Dashboard CAD — Groupe E Celsius', M, 10);
-    pdf.setFontSize(9);
-    pdf.setFont('helvetica', 'normal');
-    pdf.text(title, M, 17);
-    pdf.setTextColor(0, 0, 0);
-    y = 28;
-  };
-
-  const addCanvas = async (canvasId, label) => {
-    const el = document.getElementById(canvasId);
-    if (!el) return;
-    try {
-      const imgData = el.toDataURL('image/png', 0.92);
-      const ratio = el.height / el.width;
-      const imgW = W - 2*M;
-      const imgH = Math.min(imgW * ratio, 80);
-      if (y + imgH + 15 > H - M) { pdf.addPage(); addHeader(label); }
-      pdf.setFontSize(9); pdf.setFont('helvetica', 'bold');
-      pdf.setTextColor(22, 58, 95);
-      pdf.text(label, M, y + 5);
-      y += 8;
-      pdf.addImage(imgData, 'PNG', M, y, imgW, imgH);
-      y += imgH + 8;
-    } catch(e) { console.warn('PDF: canvas skip', canvasId, e); }
-  };
-
-  const scopeMap = {
-    recap: { title: 'Récapitulatif Global', tabs: ['tab-recap'], charts: ['chartRecapBar','chartRecapPie'] },
-    sia2:  { title: 'Phase SIA 2 — Avant-Projet',          tabs: ['tab-sia2'], charts: ['chartSIA2','pieSIA2BR','barSIA2'] },
-    sia3:  { title: 'Phase SIA 3 — Projet de Réalisation',  tabs: ['tab-sia3'], charts: ['chartSIA3','pieSIA3BR','barSIA3'] },
-    sia4:  { title: 'Phase SIA 4 — Appels d\'Offres',       tabs: ['tab-sia4'], charts: ['chartSIA4','pieSIA4BR','barSIA4'] },
-    sia5:  { title: 'Phase SIA 5 — Réalisation',            tabs: ['tab-sia5'], charts: ['chart','chartPieBudgetRev','chartPieAT','chartBar','chartHonoMetier','chartGantt'] }
-  };
-
-  const scopes = scope === 'all' ? Object.keys(scopeMap).filter(k=>k!=='all') : [scope];
-
-  for (let i = 0; i < scopes.length; i++) {
-    const sc = scopeMap[scopes[i]];
-    if (!sc) continue;
-    if (i > 0) pdf.addPage();
-    addHeader(sc.title);
-    pdf.setFontSize(11); pdf.setFont('helvetica', 'bold');
-    pdf.text(sc.title, M, y);
-    pdf.setFontSize(8); pdf.setFont('helvetica', 'normal');
-    pdf.setTextColor(120, 120, 120);
-    pdf.text(`Généré le ${new Date().toLocaleDateString('fr-CH')} — Projet CL150096`, M, y + 5);
-    pdf.setTextColor(0,0,0);
-    y += 12;
-    for (const cid of sc.charts) {
-      await addCanvas(cid, cid);
+  // --- Helpers PDF ---
+  const checkNewPage = (needed=20) => {
+    if (y + needed > pageH - margin) {
+      doc.addPage();
+      pageCount++;
+      y = margin;
+      renderHeader();
     }
+  };
+
+  const renderHeader = () => {
+    doc.setFillColor(22, 58, 95);
+    doc.rect(0, 0, pageW, 18, 'F');
+    doc.setTextColor(255,255,255);
+    doc.setFontSize(9);
+    doc.setFont('helvetica','bold');
+    doc.text('GROUPE E CELSIUS — Dashboard CAD CL150096', margin, 12);
+    doc.text(`Page ${pageCount}`, pageW - margin, 12, { align:'right' });
+    doc.setTextColor(0,0,0);
+    y = 22;
+  };
+
+  const addTitle = (text, level=1) => {
+    checkNewPage(14);
+    if (level === 1) {
+      doc.setFillColor(22, 58, 95);
+      doc.rect(margin, y, contentW, 9, 'F');
+      doc.setTextColor(255,255,255);
+      doc.setFontSize(10);
+      doc.setFont('helvetica','bold');
+      doc.text(text, margin+3, y+6.5);
+      doc.setTextColor(0,0,0);
+      y += 13;
+    } else {
+      doc.setFillColor(232, 135, 58);
+      doc.rect(margin, y, 3, 7, 'F');
+      doc.setFontSize(9);
+      doc.setFont('helvetica','bold');
+      doc.setTextColor(22,58,95);
+      doc.text(text, margin+5, y+5.5);
+      doc.setTextColor(0,0,0);
+      y += 11;
+    }
+  };
+
+  const addKPIs = (kpiSectionId) => {
+    const el = document.getElementById(kpiSectionId);
+    if (!el) return;
+    const cards = el.querySelectorAll('.kpi-card');
+    if (!cards.length) return;
+    checkNewPage(20);
+    const colW = contentW / Math.min(cards.length, 4);
+    cards.forEach((card, i) => {
+      const col = i % 4;
+      const label = card.querySelector('.kpi-label')?.textContent?.trim() || '';
+      const value = card.querySelector('.kpi-value')?.textContent?.trim() || '';
+      const unit  = card.querySelector('.kpi-unit')?.textContent?.trim()  || '';
+      const x = margin + col * colW;
+      const yBox = y;
+      doc.setFillColor(240,244,249);
+      doc.setDrawColor(200,210,220);
+      doc.roundedRect(x+1, yBox, colW-2, 16, 2, 2, 'FD');
+      doc.setFontSize(6.5);
+      doc.setFont('helvetica','bold');
+      doc.setTextColor(90,120,155);
+      doc.text(label.toUpperCase(), x + colW/2, yBox+5, { align:'center' });
+      doc.setFontSize(10);
+      doc.setTextColor(22,58,95);
+      doc.text(value, x + colW/2, yBox+11, { align:'center' });
+      doc.setFontSize(6);
+      doc.setTextColor(130,150,170);
+      doc.text(unit, x + colW/2, yBox+15, { align:'center' });
+      if (col === 3 || i === cards.length-1) y += 19;
+    });
+    doc.setTextColor(0,0,0);
+  };
+
+  const addTable = (tableId, maxRows=40) => {
+    const tbl = document.getElementById(tableId);
+    if (!tbl) return;
+    const headers = [...tbl.querySelectorAll('thead th')].map(th => th.textContent.trim());
+    if (!headers.length) return;
+
+    const colW = contentW / headers.length;
+    checkNewPage(12);
+
+    // Header
+    doc.setFillColor(22,58,95);
+    doc.rect(margin, y, contentW, 7, 'F');
+    doc.setTextColor(255,255,255);
+    doc.setFontSize(6.5);
+    doc.setFont('helvetica','bold');
+    headers.forEach((h,i) => {
+      const txt = h.length > 14 ? h.substring(0,12)+'.' : h;
+      doc.text(txt, margin + i*colW + colW/2, y+5, { align:'center' });
+    });
+    y += 8;
+
+    const rows = [...tbl.querySelectorAll('tbody tr, tfoot tr')].slice(0, maxRows);
+    rows.forEach((row, ri) => {
+      checkNewPage(7);
+      const cells = [...row.querySelectorAll('td')];
+      const isFooter = row.closest('tfoot') !== null;
+      if (isFooter) {
+        doc.setFillColor(220,230,240);
+        doc.rect(margin, y, contentW, 6.5, 'F');
+        doc.setFont('helvetica','bold');
+      } else {
+        if (ri % 2 === 0) { doc.setFillColor(248,251,255); doc.rect(margin, y, contentW, 6.5, 'F'); }
+        doc.setFont('helvetica','normal');
+      }
+      doc.setTextColor(0,0,0);
+      doc.setFontSize(6.2);
+      cells.forEach((cell, ci) => {
+        const txt = (cell.textContent.trim()).replace(/\s+/g,' ');
+        const short = txt.length > 18 ? txt.substring(0,16)+'…' : txt;
+        const align = ci === 0 ? 'left' : 'center';
+        const xPos  = ci === 0 ? margin+2 : margin + ci*colW + colW/2;
+        doc.text(short, xPos, y+4.5, { align });
+      });
+      y += 7;
+    });
+    y += 4;
+  };
+
+  const addChartCanvas = async (canvasId, heightMM=60) => {
+    const canvas = document.getElementById(canvasId);
+    if (!canvas) return;
+    checkNewPage(heightMM + 5);
+    try {
+      const imgData = canvas.toDataURL('image/png', 0.92);
+      if (!imgData || imgData === 'data:,') return;
+      doc.addImage(imgData, 'PNG', margin, y, contentW, heightMM);
+      y += heightMM + 5;
+    } catch(e) { console.warn('Chart capture failed:', canvasId, e); }
+  };
+
+  // --- Section générique par phase ---
+  const renderPhasePDF = async (phaseLabel, phaseSuffix, phases3) => {
+    addTitle(`${phaseLabel} — BUDGETS`, 1);
+    addKPIs(`kpiSection${phaseSuffix}`);
+    await addChartCanvas(`chart${phaseSuffix}`, 55);
+    addTitle('Tableau Budgets', 2);
+    addTable(`table${phaseSuffix}Budget`);
+    await addChartCanvas(`pie${phaseSuffix}BR`, 45);
+    await addChartCanvas(`bar${phaseSuffix}`, 45);
+
+    addTitle(`${phaseLabel} — IMPUTATIONS`, 1);
+    addKPIs(`kpiSectionImp${phaseSuffix}`);
+    addTable(`tableImpSIA${phaseSuffix.replace('SIA','')}` , 30);
+
+    addTitle(`${phaseLabel} — PLANNING`, 1);
+    await addChartCanvas(`gantt${phaseSuffix}`, 65);
+  };
+
+  // === GÉNÉRATION SELON SCOPE ===
+  renderHeader();
+
+  // Page de garde
+  doc.setFillColor(22,58,95);
+  doc.rect(margin, y, contentW, 28, 'F');
+  doc.setTextColor(255,255,255);
+  doc.setFontSize(16);
+  doc.setFont('helvetica','bold');
+  doc.text('Dashboard CAD — Groupe E Celsius', pageW/2, y+12, { align:'center' });
+  doc.setFontSize(10);
+  doc.setFont('helvetica','normal');
+  const scopeLabel = {
+    recap:'Récapitulatif Global', sia2:'Phase SIA 2', sia3:'Phase SIA 3',
+    sia4:'Phase SIA 4', sia5:'Phase SIA 5', all:'Rapport Complet'
+  }[scope] || scope;
+  doc.text(scopeLabel, pageW/2, y+20, { align:'center' });
+  doc.setFontSize(8);
+  doc.setTextColor(200,220,240);
+  doc.text(`Généré le ${new Date().toLocaleDateString('fr-CH')} — Projet CL150096`, pageW/2, y+26, { align:'center' });
+  doc.setTextColor(0,0,0);
+  y += 34;
+
+  if (scope === 'recap' || scope === 'all') {
+    addTitle('RÉCAPITULATIF GLOBAL — BUDGETS', 1);
+    addKPIs('recapBudgetKPI');
+    await addChartCanvas('recapBudgetChart', 55);
+    addTitle('Tableau Comparatif par Phase', 2);
+    addTable('recapBudgetTable');
+    addTitle('RÉCAPITULATIF GLOBAL — IMPUTATIONS', 1);
+    addKPIs('recapImputKPI');
+    await addChartCanvas('recapImputChart', 50);
+    addTable('recapImputTable');
+    addTitle('RÉCAPITULATIF GLOBAL — PLANNING', 1);
+    await addChartCanvas('recapPlanningChart', 60);
   }
 
-  pdf.save(`Dashboard_CAD_${scope}_${new Date().toISOString().split('T')[0]}.pdf`);
-  showLoader(false);
-  setStatus('✅ PDF généré avec succès', 'ok');
+  if (scope === 'sia2' || scope === 'all') await renderPhasePDF('PHASE SIA 2', 'SIA2', true);
+  if (scope === 'sia3' || scope === 'all') await renderPhasePDF('PHASE SIA 3', 'SIA3', true);
+  if (scope === 'sia4' || scope === 'all') await renderPhasePDF('PHASE SIA 4', 'SIA4', true);
+
+  if (scope === 'sia5' || scope === 'all') {
+    addTitle('PHASE SIA 5 — BUDGETS', 1);
+    addKPIs('kpiSectionSIA5');
+    await addChartCanvas('chartSIA5', 55);
+    addTitle('Tableau Mensuel Budget Révisé vs Réel', 2);
+    addTable('tableSIA5Monthly', 24);
+    addTitle('Tableau Budgets par Sous-Projet', 2);
+    addTable('tableSIA5Budget');
+    await addChartCanvas('pieSIA5BR', 45);
+    await addChartCanvas('barSIA5', 45);
+
+    addTitle('PHASE SIA 5 — IMPUTATIONS', 1);
+    addKPIs('kpiSectionImpSIA5');
+    addTable('tableImputSIA5', 25);
+
+    addTitle('PHASE SIA 5 — PLANNING', 1);
+    addTable('tablePlanningSIA5');
+    await addChartCanvas('ganttSIA5', 65);
+  }
+
+  // Numérotation finale
+  const totalPages = doc.internal.getNumberOfPages();
+  for (let i=1; i<=totalPages; i++) {
+    doc.setPage(i);
+    doc.setFontSize(7.5);
+    doc.setTextColor(120,140,160);
+    doc.setFont('helvetica','normal');
+    doc.text(`Groupe E Celsius — Dashboard CAD CL150096 — Page ${i}/${totalPages}`, pageW/2, pageH-5, { align:'center' });
+    doc.setDrawColor(200,210,220);
+    doc.line(margin, pageH-8, pageW-margin, pageH-8);
+  }
+
+  doc.save(`Dashboard_CAD_${scope}_${new Date().toISOString().slice(0,10)}.pdf`);
 }
