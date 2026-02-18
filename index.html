@@ -35,7 +35,7 @@
 
 <!-- ===== TABS ===== -->
 <div class="tabs" id="mainTabs">
-  <button class="tab-btn active" data-tab="tabRecap">🏠 Récap Global</button>
+  <button class="tab-btn active" data-tab="tabRecap">🏠 Récap</button>
   <button class="tab-btn" data-tab="tabSIA2">📋 SIA 2</button>
   <button class="tab-btn" data-tab="tabSIA3">📋 SIA 3</button>
   <button class="tab-btn" data-tab="tabSIA4">📋 SIA 4</button>
@@ -52,7 +52,6 @@
     <!-- Config -->
     <div class="card" id="cardConfig">
       <h2>⚙️ Configuration & Import</h2>
-      <p class="hint">💡 <strong>Recommandations k :</strong> 6–8 (linéaires/études) • 10–14 (CAPEX réseau/GC) • 14–18 (projets courts/rapides)</p>
       <div class="grid-4">
         <div class="form-col">
           <label for="prevFile">📁 Prévisions (Excel)</label>
@@ -61,20 +60,6 @@
         <div class="form-col">
           <label for="realFile">📁 Coûts Réels (Excel)</label>
           <input type="file" id="realFile" accept=".xlsx,.xls"/>
-        </div>
-        <div class="form-col">
-          <label for="coefK">Coefficient k (Courbe S)</label>
-          <div class="k-wrap">
-            <input type="range" id="coefK" min="4" max="20" step="0.5" value="12"/>
-            <input type="number" id="coefK_num" min="4" max="20" step="0.5" value="12"/>
-          </div>
-        </div>
-        <div class="form-col">
-          <label>📆 Mode d'affichage</label>
-          <div class="toggle">
-            <label><input type="radio" name="viewMode" id="viewGlobal" value="global" checked/> Vue Globale</label>
-            <label><input type="radio" name="viewMode" id="viewSOnly" value="s-only"/> Vue S uniquement</label>
-          </div>
         </div>
       </div>
       <div class="status" id="status">⏳ En attente des fichiers...</div>
@@ -129,6 +114,27 @@
   <div id="tabSIA2" class="tab-content">
     <div class="section-title"><h2>📋 SIA 2 — Études Préliminaires</h2></div>
     
+    <!-- PARTIE 1: BUDGETS -->
+    <div class="card">
+      <h2>⚙️ Paramètres Phase SIA 2</h2>
+      <div class="grid-4">
+        <div class="form-col">
+          <label for="coefK_SIA2">Coefficient k (Courbe S)</label>
+          <div class="k-wrap">
+            <input type="range" id="coefK_SIA2" min="4" max="20" step="0.5" value="12"/>
+            <input type="number" id="coefK_SIA2_num" min="4" max="20" step="0.5" value="12"/>
+          </div>
+        </div>
+        <div class="form-col">
+          <label>📆 Mode d'affichage</label>
+          <div class="toggle">
+            <label><input type="radio" name="viewMode_SIA2" id="viewGlobal_SIA2" value="global" checked/> Vue Globale</label>
+            <label><input type="radio" name="viewMode_SIA2" id="viewSOnly_SIA2" value="s-only"/> Vue S uniquement</label>
+          </div>
+        </div>
+      </div>
+    </div>
+
     <div id="kpiSIA2" class="kpi-section" style="display:none;"></div>
 
     <div class="card" id="cardCourbesSIA2">
@@ -136,7 +142,19 @@
         <h2>📈 Courbes S — SIA 2</h2>
         <div class="card-actions"><button class="btn-export-sm" onclick="exportChartPNG('chartSIA2','courbes_S_SIA2')">📸 PNG</button></div>
       </div>
+      <p class="hint">💡 Chaque courbe (Budget, Budget Révisé, AT) utilise ses propres dates de début/fin</p>
       <div class="chart-wrapper"><canvas id="chartSIA2"></canvas></div>
+    </div>
+
+    <div class="card" id="tableCompareSIA2Card">
+      <div class="card-header">
+        <h2>📊 Comparaison Mois par Mois — SIA 2</h2>
+        <div class="card-actions">
+          <button class="btn-export-sm" onclick="exportTablePNG('tableCompareSIA2Card','compare_mois_SIA2')">🖼 PNG</button>
+          <button class="btn-export-sm btn-excel" onclick="exportTableXLSX('tableCompareSIA2','Compare_Mois_SIA2')">📥 Excel</button>
+        </div>
+      </div>
+      <div class="table-wrapper"><table class="table" id="tableCompareSIA2"></table></div>
     </div>
 
     <div class="card" id="cardBarSIA2">
@@ -147,95 +165,207 @@
       <div class="chart-wrapper"><canvas id="chartBarSIA2"></canvas></div>
     </div>
 
-    <div class="card" id="tableSIA2Card">
+    <!-- PARTIE 2: IMPUTATIONS -->
+    <div class="section-title"><h2>💼 Imputations & Honoraires — SIA 2</h2></div>
+
+    <div class="card" id="tableRessourcesSIA2Card">
       <div class="card-header">
-        <h2>🔍 Comparatif par Tâche</h2>
+        <h2>👥 Ressources & Honoraires</h2>
         <div class="card-actions">
-          <button class="btn-export-sm" onclick="exportTablePNG('tableSIA2Card','comparatif_SIA2')">🖼 PNG</button>
-          <button class="btn-export-sm btn-excel" onclick="exportTableXLSX('tableSIA2','Comparatif_SIA2')">📥 Excel</button>
+          <button class="btn-export-sm" onclick="exportTablePNG('tableRessourcesSIA2Card','ressources_SIA2')">🖼 PNG</button>
+          <button class="btn-export-sm btn-excel" onclick="exportTableXLSX('tableRessourcesSIA2','Ressources_SIA2')">📥 Excel</button>
         </div>
       </div>
-      <div class="table-wrapper"><table class="table" id="tableSIA2"></table></div>
+      <p class="hint">💡 Honoraires internes et externes séparés — Totaux cumulés par ressource — Uniquement lignes «Honoraires»</p>
+      <div class="table-wrapper"><table class="table" id="tableRessourcesSIA2"></table></div>
     </div>
+
+    <div class="card" id="cardHonoMetierSIA2">
+      <div class="card-header">
+        <h2>📊 Honoraires par Type (BR / AT / Réel)</h2>
+        <div class="card-actions"><button class="btn-export-sm" onclick="exportChartPNG('chartHonoMetierSIA2','honoraires_type_SIA2')">📸 PNG</button></div>
+      </div>
+      <div class="chart-wrapper"><canvas id="chartHonoMetierSIA2"></canvas></div>
+    </div>
+
+    <!-- PARTIE 3: PLANNING -->
+    <div class="section-title"><h2>📅 Planning & Gantt — SIA 2</h2></div>
+
+    <div class="card" id="tablePlanningSIA2Card">
+      <div class="card-header">
+        <h2>🗓️ Dates de Planification (Modifiable)</h2>
+        <div class="card-actions">
+          <button class="btn-secondary" onclick="applyPlanning('SIA2')">🔄 Recalculer Gantt</button>
+        </div>
+      </div>
+      <p class="hint">💡 Orange = Budget Révisé • Bleu foncé = AT • Rouge = Réel<br/>💡 Champs <strong>Réel Début/Fin</strong> pré-remplis depuis les imputations. Modifiables manuellement puis <strong>Recalculer Gantt</strong>.</p>
+      <div class="table-wrapper"><table class="table" id="tablePlanningSIA2"></table></div>
+    </div>
+
+    <div class="card" id="cardGanttSIA2">
+      <div class="card-header">
+        <h2>📅 Gantt — SIA 2</h2>
+        <div class="card-actions"><button class="btn-export-sm" onclick="exportChartPNG('chartGanttSIA2','gantt_SIA2')">📸 PNG</button></div>
+      </div>
+      <div class="chart-wrapper-gantt"><canvas id="chartGanttSIA2"></canvas></div>
+    </div>
+
   </div><!-- /tabSIA2 -->
 
   <!-- ======================================================= -->
-  <!-- ONGLET SIA 3                                            -->
+  <!-- ONGLET SIA 3 (structure identique SIA 2)                -->
   <!-- ======================================================= -->
   <div id="tabSIA3" class="tab-content">
     <div class="section-title"><h2>📋 SIA 3 — Étude du Projet</h2></div>
     
-    <div id="kpiSIA3" class="kpi-section" style="display:none;"></div>
-
-    <div class="card" id="cardCourbesSIA3">
-      <div class="card-header">
-        <h2>📈 Courbes S — SIA 3</h2>
-        <div class="card-actions"><button class="btn-export-sm" onclick="exportChartPNG('chartSIA3','courbes_S_SIA3')">📸 PNG</button></div>
+    <div class="card">
+      <h2>⚙️ Paramètres Phase SIA 3</h2>
+      <div class="grid-4">
+        <div class="form-col">
+          <label for="coefK_SIA3">Coefficient k (Courbe S)</label>
+          <div class="k-wrap">
+            <input type="range" id="coefK_SIA3" min="4" max="20" step="0.5" value="12"/>
+            <input type="number" id="coefK_SIA3_num" min="4" max="20" step="0.5" value="12"/>
+          </div>
+        </div>
+        <div class="form-col">
+          <label>📆 Mode d'affichage</label>
+          <div class="toggle">
+            <label><input type="radio" name="viewMode_SIA3" id="viewGlobal_SIA3" value="global" checked/> Vue Globale</label>
+            <label><input type="radio" name="viewMode_SIA3" id="viewSOnly_SIA3" value="s-only"/> Vue S uniquement</label>
+          </div>
+        </div>
       </div>
-      <div class="chart-wrapper"><canvas id="chartSIA3"></canvas></div>
     </div>
 
+    <div id="kpiSIA3" class="kpi-section" style="display:none;"></div>
+    <div class="card" id="cardCourbesSIA3">
+      <div class="card-header"><h2>📈 Courbes S — SIA 3</h2><div class="card-actions"><button class="btn-export-sm" onclick="exportChartPNG('chartSIA3','courbes_S_SIA3')">📸 PNG</button></div></div>
+      <p class="hint">💡 Chaque courbe (Budget, Budget Révisé, AT) utilise ses propres dates de début/fin</p>
+      <div class="chart-wrapper"><canvas id="chartSIA3"></canvas></div>
+    </div>
+    <div class="card" id="tableCompareSIA3Card">
+      <div class="card-header"><h2>📊 Comparaison Mois par Mois — SIA 3</h2><div class="card-actions"><button class="btn-export-sm" onclick="exportTablePNG('tableCompareSIA3Card','compare_mois_SIA3')">🖼 PNG</button><button class="btn-export-sm btn-excel" onclick="exportTableXLSX('tableCompareSIA3','Compare_Mois_SIA3')">📥 Excel</button></div></div>
+      <div class="table-wrapper"><table class="table" id="tableCompareSIA3"></table></div>
+    </div>
     <div class="card" id="cardBarSIA3">
-      <div class="card-header">
-        <h2>📊 Avancement par Tâche (BR / AT / Réel)</h2>
-        <div class="card-actions"><button class="btn-export-sm" onclick="exportChartPNG('chartBarSIA3','avancement_taches_SIA3')">📸 PNG</button></div>
-      </div>
+      <div class="card-header"><h2>📊 Avancement par Tâche (BR / AT / Réel)</h2><div class="card-actions"><button class="btn-export-sm" onclick="exportChartPNG('chartBarSIA3','avancement_taches_SIA3')">📸 PNG</button></div></div>
       <div class="chart-wrapper"><canvas id="chartBarSIA3"></canvas></div>
     </div>
 
-    <div class="card" id="tableSIA3Card">
-      <div class="card-header">
-        <h2>🔍 Comparatif par Tâche</h2>
-        <div class="card-actions">
-          <button class="btn-export-sm" onclick="exportTablePNG('tableSIA3Card','comparatif_SIA3')">🖼 PNG</button>
-          <button class="btn-export-sm btn-excel" onclick="exportTableXLSX('tableSIA3','Comparatif_SIA3')">📥 Excel</button>
-        </div>
-      </div>
-      <div class="table-wrapper"><table class="table" id="tableSIA3"></table></div>
+    <div class="section-title"><h2>💼 Imputations & Honoraires — SIA 3</h2></div>
+    <div class="card" id="tableRessourcesSIA3Card">
+      <div class="card-header"><h2>👥 Ressources & Honoraires</h2><div class="card-actions"><button class="btn-export-sm" onclick="exportTablePNG('tableRessourcesSIA3Card','ressources_SIA3')">🖼 PNG</button><button class="btn-export-sm btn-excel" onclick="exportTableXLSX('tableRessourcesSIA3','Ressources_SIA3')">📥 Excel</button></div></div>
+      <p class="hint">💡 Honoraires internes et externes séparés — Totaux cumulés par ressource — Uniquement lignes «Honoraires»</p>
+      <div class="table-wrapper"><table class="table" id="tableRessourcesSIA3"></table></div>
+    </div>
+    <div class="card" id="cardHonoMetierSIA3">
+      <div class="card-header"><h2>📊 Honoraires par Type (BR / AT / Réel)</h2><div class="card-actions"><button class="btn-export-sm" onclick="exportChartPNG('chartHonoMetierSIA3','honoraires_type_SIA3')">📸 PNG</button></div></div>
+      <div class="chart-wrapper"><canvas id="chartHonoMetierSIA3"></canvas></div>
+    </div>
+
+    <div class="section-title"><h2>📅 Planning & Gantt — SIA 3</h2></div>
+    <div class="card" id="tablePlanningSIA3Card">
+      <div class="card-header"><h2>🗓️ Dates de Planification (Modifiable)</h2><div class="card-actions"><button class="btn-secondary" onclick="applyPlanning('SIA3')">🔄 Recalculer Gantt</button></div></div>
+      <p class="hint">💡 Orange = Budget Révisé • Bleu foncé = AT • Rouge = Réel<br/>💡 Champs <strong>Réel Début/Fin</strong> pré-remplis depuis les imputations. Modifiables manuellement puis <strong>Recalculer Gantt</strong>.</p>
+      <div class="table-wrapper"><table class="table" id="tablePlanningSIA3"></table></div>
+    </div>
+    <div class="card" id="cardGanttSIA3">
+      <div class="card-header"><h2>📅 Gantt — SIA 3</h2><div class="card-actions"><button class="btn-export-sm" onclick="exportChartPNG('chartGanttSIA3','gantt_SIA3')">📸 PNG</button></div></div>
+      <div class="chart-wrapper-gantt"><canvas id="chartGanttSIA3"></canvas></div>
     </div>
   </div><!-- /tabSIA3 -->
 
   <!-- ======================================================= -->
-  <!-- ONGLET SIA 4                                            -->
+  <!-- ONGLET SIA 4 (structure identique SIA 2/3)              -->
   <!-- ======================================================= -->
   <div id="tabSIA4" class="tab-content">
     <div class="section-title"><h2>📋 SIA 4 — Appel d'Offres</h2></div>
     
-    <div id="kpiSIA4" class="kpi-section" style="display:none;"></div>
-
-    <div class="card" id="cardCourbesSIA4">
-      <div class="card-header">
-        <h2>📈 Courbes S — SIA 4</h2>
-        <div class="card-actions"><button class="btn-export-sm" onclick="exportChartPNG('chartSIA4','courbes_S_SIA4')">📸 PNG</button></div>
+    <div class="card">
+      <h2>⚙️ Paramètres Phase SIA 4</h2>
+      <div class="grid-4">
+        <div class="form-col">
+          <label for="coefK_SIA4">Coefficient k (Courbe S)</label>
+          <div class="k-wrap">
+            <input type="range" id="coefK_SIA4" min="4" max="20" step="0.5" value="12"/>
+            <input type="number" id="coefK_SIA4_num" min="4" max="20" step="0.5" value="12"/>
+          </div>
+        </div>
+        <div class="form-col">
+          <label>📆 Mode d'affichage</label>
+          <div class="toggle">
+            <label><input type="radio" name="viewMode_SIA4" id="viewGlobal_SIA4" value="global" checked/> Vue Globale</label>
+            <label><input type="radio" name="viewMode_SIA4" id="viewSOnly_SIA4" value="s-only"/> Vue S uniquement</label>
+          </div>
+        </div>
       </div>
-      <div class="chart-wrapper"><canvas id="chartSIA4"></canvas></div>
     </div>
 
+    <div id="kpiSIA4" class="kpi-section" style="display:none;"></div>
+    <div class="card" id="cardCourbesSIA4">
+      <div class="card-header"><h2>📈 Courbes S — SIA 4</h2><div class="card-actions"><button class="btn-export-sm" onclick="exportChartPNG('chartSIA4','courbes_S_SIA4')">📸 PNG</button></div></div>
+      <p class="hint">💡 Chaque courbe (Budget, Budget Révisé, AT) utilise ses propres dates de début/fin</p>
+      <div class="chart-wrapper"><canvas id="chartSIA4"></canvas></div>
+    </div>
+    <div class="card" id="tableCompareSIA4Card">
+      <div class="card-header"><h2>📊 Comparaison Mois par Mois — SIA 4</h2><div class="card-actions"><button class="btn-export-sm" onclick="exportTablePNG('tableCompareSIA4Card','compare_mois_SIA4')">🖼 PNG</button><button class="btn-export-sm btn-excel" onclick="exportTableXLSX('tableCompareSIA4','Compare_Mois_SIA4')">📥 Excel</button></div></div>
+      <div class="table-wrapper"><table class="table" id="tableCompareSIA4"></table></div>
+    </div>
     <div class="card" id="cardBarSIA4">
-      <div class="card-header">
-        <h2>📊 Avancement par Tâche (BR / AT / Réel)</h2>
-        <div class="card-actions"><button class="btn-export-sm" onclick="exportChartPNG('chartBarSIA4','avancement_taches_SIA4')">📸 PNG</button></div>
-      </div>
+      <div class="card-header"><h2>📊 Avancement par Tâche (BR / AT / Réel)</h2><div class="card-actions"><button class="btn-export-sm" onclick="exportChartPNG('chartBarSIA4','avancement_taches_SIA4')">📸 PNG</button></div></div>
       <div class="chart-wrapper"><canvas id="chartBarSIA4"></canvas></div>
     </div>
 
-    <div class="card" id="tableSIA4Card">
-      <div class="card-header">
-        <h2>🔍 Comparatif par Tâche</h2>
-        <div class="card-actions">
-          <button class="btn-export-sm" onclick="exportTablePNG('tableSIA4Card','comparatif_SIA4')">🖼 PNG</button>
-          <button class="btn-export-sm btn-excel" onclick="exportTableXLSX('tableSIA4','Comparatif_SIA4')">📥 Excel</button>
-        </div>
-      </div>
-      <div class="table-wrapper"><table class="table" id="tableSIA4"></table></div>
+    <div class="section-title"><h2>💼 Imputations & Honoraires — SIA 4</h2></div>
+    <div class="card" id="tableRessourcesSIA4Card">
+      <div class="card-header"><h2>👥 Ressources & Honoraires</h2><div class="card-actions"><button class="btn-export-sm" onclick="exportTablePNG('tableRessourcesSIA4Card','ressources_SIA4')">🖼 PNG</button><button class="btn-export-sm btn-excel" onclick="exportTableXLSX('tableRessourcesSIA4','Ressources_SIA4')">📥 Excel</button></div></div>
+      <p class="hint">💡 Honoraires internes et externes séparés — Totaux cumulés par ressource — Uniquement lignes «Honoraires»</p>
+      <div class="table-wrapper"><table class="table" id="tableRessourcesSIA4"></table></div>
+    </div>
+    <div class="card" id="cardHonoMetierSIA4">
+      <div class="card-header"><h2>📊 Honoraires par Type (BR / AT / Réel)</h2><div class="card-actions"><button class="btn-export-sm" onclick="exportChartPNG('chartHonoMetierSIA4','honoraires_type_SIA4')">📸 PNG</button></div></div>
+      <div class="chart-wrapper"><canvas id="chartHonoMetierSIA4"></canvas></div>
+    </div>
+
+    <div class="section-title"><h2>📅 Planning & Gantt — SIA 4</h2></div>
+    <div class="card" id="tablePlanningSIA4Card">
+      <div class="card-header"><h2>🗓️ Dates de Planification (Modifiable)</h2><div class="card-actions"><button class="btn-secondary" onclick="applyPlanning('SIA4')">🔄 Recalculer Gantt</button></div></div>
+      <p class="hint">💡 Orange = Budget Révisé • Bleu foncé = AT • Rouge = Réel<br/>💡 Champs <strong>Réel Début/Fin</strong> pré-remplis depuis les imputations. Modifiables manuellement puis <strong>Recalculer Gantt</strong>.</p>
+      <div class="table-wrapper"><table class="table" id="tablePlanningSIA4"></table></div>
+    </div>
+    <div class="card" id="cardGanttSIA4">
+      <div class="card-header"><h2>📅 Gantt — SIA 4</h2><div class="card-actions"><button class="btn-export-sm" onclick="exportChartPNG('chartGanttSIA4','gantt_SIA4')">📸 PNG</button></div></div>
+      <div class="chart-wrapper-gantt"><canvas id="chartGanttSIA4"></canvas></div>
     </div>
   </div><!-- /tabSIA4 -->
 
   <!-- ======================================================= -->
-  <!-- ONGLET SIA 5                                            -->
+  <!-- ONGLET SIA 5 (structure complète avec sous-projets)     -->
   <!-- ======================================================= -->
   <div id="tabSIA5" class="tab-content">
     <div class="section-title"><h2>📋 SIA 5 — Réalisation</h2></div>
+
+    <div class="card">
+      <h2>⚙️ Paramètres Phase SIA 5</h2>
+      <p class="hint">💡 <strong>Recommandations k :</strong> 6–8 (linéaires/études) • 10–14 (CAPEX réseau/GC) • 14–18 (projets courts/rapides)</p>
+      <div class="grid-4">
+        <div class="form-col">
+          <label for="coefK_SIA5">Coefficient k (Courbe S)</label>
+          <div class="k-wrap">
+            <input type="range" id="coefK_SIA5" min="4" max="20" step="0.5" value="12"/>
+            <input type="number" id="coefK_SIA5_num" min="4" max="20" step="0.5" value="12"/>
+          </div>
+        </div>
+        <div class="form-col">
+          <label>📆 Mode d'affichage</label>
+          <div class="toggle">
+            <label><input type="radio" name="viewMode_SIA5" id="viewGlobal_SIA5" value="global" checked/> Vue Globale</label>
+            <label><input type="radio" name="viewMode_SIA5" id="viewSOnly_SIA5" value="s-only"/> Vue S uniquement</label>
+          </div>
+        </div>
+      </div>
+    </div>
 
     <div id="kpiSIA5" class="kpi-section" style="display:none;"></div>
 
@@ -244,7 +374,19 @@
         <h2>📈 Courbes S — SIA 5</h2>
         <div class="card-actions"><button class="btn-export-sm" onclick="exportChartPNG('chartSIA5','courbes_S_SIA5')">📸 PNG</button></div>
       </div>
+      <p class="hint">💡 Chaque courbe (Budget, Budget Révisé, AT) utilise ses propres dates de début/fin</p>
       <div class="chart-wrapper"><canvas id="chartSIA5"></canvas></div>
+    </div>
+
+    <div class="card" id="tableCompareSIA5Card">
+      <div class="card-header">
+        <h2>📊 Comparaison Mois par Mois — SIA 5</h2>
+        <div class="card-actions">
+          <button class="btn-export-sm" onclick="exportTablePNG('tableCompareSIA5Card','compare_mois_SIA5')">🖼 PNG</button>
+          <button class="btn-export-sm btn-excel" onclick="exportTableXLSX('tableCompareSIA5','Compare_Mois_SIA5')">📥 Excel</button>
+        </div>
+      </div>
+      <div class="table-wrapper"><table class="table" id="tableCompareSIA5"></table></div>
     </div>
 
     <div class="charts-grid">
@@ -272,15 +414,18 @@
       <div class="chart-wrapper"><canvas id="chartBarSIA5"></canvas></div>
     </div>
 
-    <div class="card" id="tableSIA5Card">
+    <div class="section-title"><h2>💼 Imputations & Honoraires — SIA 5</h2></div>
+
+    <div class="card" id="tableRessourcesSIA5Card">
       <div class="card-header">
-        <h2>🔍 Comparatif par Projet</h2>
+        <h2>👥 Ressources & Honoraires</h2>
         <div class="card-actions">
-          <button class="btn-export-sm" onclick="exportTablePNG('tableSIA5Card','comparatif_SIA5')">🖼 PNG</button>
-          <button class="btn-export-sm btn-excel" onclick="exportTableXLSX('tableSIA5','Comparatif_SIA5')">📥 Excel</button>
+          <button class="btn-export-sm" onclick="exportTablePNG('tableRessourcesSIA5Card','ressources_SIA5')">🖼 PNG</button>
+          <button class="btn-export-sm btn-excel" onclick="exportTableXLSX('tableRessourcesSIA5','Ressources_SIA5')">📥 Excel</button>
         </div>
       </div>
-      <div class="table-wrapper"><table class="table" id="tableSIA5"></table></div>
+      <p class="hint">💡 Honoraires internes et externes séparés — Totaux cumulés par ressource — Uniquement lignes «Honoraires»</p>
+      <div class="table-wrapper"><table class="table" id="tableRessourcesSIA5"></table></div>
     </div>
 
     <div class="card" id="cardHonoMetierSIA5">
@@ -291,9 +436,22 @@
       <div class="chart-wrapper"><canvas id="chartHonoMetierSIA5"></canvas></div>
     </div>
 
+    <div class="section-title"><h2>📅 Planning & Gantt — SIA 5</h2></div>
+
+    <div class="card" id="tablePlanningSIA5Card">
+      <div class="card-header">
+        <h2>🗓️ Dates de Planification (Modifiable)</h2>
+        <div class="card-actions">
+          <button class="btn-secondary" onclick="applyPlanning('SIA5')">🔄 Recalculer Gantt</button>
+        </div>
+      </div>
+      <p class="hint">💡 Orange = Budget Révisé • Bleu foncé = AT • Rouge = Réel<br/>💡 Champs <strong>Réel Début/Fin</strong> pré-remplis depuis les imputations. Modifiables manuellement puis <strong>Recalculer Gantt</strong>.</p>
+      <div class="table-wrapper"><table class="table" id="tablePlanningSIA5"></table></div>
+    </div>
+
     <div class="card" id="cardGanttSIA5">
       <div class="card-header">
-        <h2>📅 Planning Gantt — SIA 5</h2>
+        <h2>📅 Gantt — SIA 5</h2>
         <div class="card-actions"><button class="btn-export-sm" onclick="exportChartPNG('chartGanttSIA5','gantt_SIA5')">📸 PNG</button></div>
       </div>
       <div class="chart-wrapper-gantt"><canvas id="chartGanttSIA5"></canvas></div>
